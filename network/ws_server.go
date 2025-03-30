@@ -122,3 +122,21 @@ func (server *WsServer) Start() error {
 	go httpServer.Serve(ln)
 	return nil
 }
+
+// Stop stops the WebSocket server and closes all connections.
+// It will also wait for all connections to be closed before returning.
+func (server *WsServer) Stop() {
+	if server.ln != nil {
+		server.ln.Close()
+	}
+
+	server.handler.mu.Lock()
+
+	defer server.handler.mu.Unlock()
+	for conn := range server.handler.conns {
+		conn.Close()
+	}
+	server.handler.conns = nil
+
+	server.handler.wg.Wait()
+}
