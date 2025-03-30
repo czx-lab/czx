@@ -1,53 +1,80 @@
 package room
 
-import (
-	"sync"
-	"time"
-
-	"github.com/IBM/sarama"
-)
+import "sync"
 
 type Room struct {
-	wg sync.WaitGroup
-
 	opt *Option
 
-	producer sarama.AsyncProducer
+	// mu is used to protect the room state and the loop
+	mu sync.Mutex
+	// wg is used to wait for the loop to finish
+	wg sync.WaitGroup
+	// loop is used to run the room loop
+	// and send messages to Kafka
+	// and receive messages from Kafka
+	loop *Loop
+	// running is used to check if the room is running
+	// and to prevent multiple calls to Run()
+	running bool
+
+	players map[uint64]struct{}
 }
 
 func NewRoom(opt *Option) *Room {
 	return &Room{
-		opt: opt,
+		opt:  opt,
+		loop: NewLoop(opt),
 	}
+}
+
+func (r *Room) ID() uint64 {
+	return r.opt.roomID
+}
+
+func (r *Room) Join(playerID uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.players[playerID] = struct{}{}
+
+	// todo:: 通知房间内玩家
+}
+
+func (r *Room) Leave(playerID uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.players, playerID)
+
+	// todo:: 通知房间内玩家
 }
 
 func (r *Room) Run() {
-	r.wg.Add(1)
-	defer r.wg.Done()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	tickerTick := time.NewTicker(r.opt.frequency)
-	defer tickerTick.Stop()
-
-	timeoutTimer := time.NewTimer(r.opt.timeout)
-
-LOOP:
-	for {
-		select {
-		case <-timeoutTimer.C:
-			break LOOP
-		case <-tickerTick.C:
-			r.producer.Input() <- &sarama.ProducerMessage{
-				Topic:     r.opt.kafkaTopic,
-				Key:       sarama.StringEncoder(r.opt.pushKey),
-				Value:     sarama.ByteEncoder(nil),
-				Timestamp: time.Now(),
-			}
-		}
+	if r.running {
+		return
 	}
 
-	r.Stop()
+	r.running = true
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+
+		r.loop.Start()
+	}()
 }
 
 func (r *Room) Stop() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.running {
+		return
+	}
+	r.running = false
+
+	r.loop.Stop()
 	r.wg.Wait()
 }
