@@ -95,6 +95,11 @@ func (a *agent) Close() {
 	a.conn.Close()
 }
 
+// Destroy implements network.Agent.
+func (a *agent) Destroy() {
+	a.conn.Destroy()
+}
+
 // LocalAddr implements Agent.
 func (a *agent) LocalAddr() net.Addr {
 	return a.conn.LocalAddr()

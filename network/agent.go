@@ -12,4 +12,5 @@ type Agent interface {
 	// RemoteAddr returns the remote address of the connection.
 	RemoteAddr() net.Addr
 	Close()
+	Destroy()
 }
