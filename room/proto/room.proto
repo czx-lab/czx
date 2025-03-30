@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package pb;
+option go_package="./pb";
+
+message FramesReq {
+
+}
+
+message FramesResp {
+
+}
+
+service Room {
+    rpc Frames(stream FramesReq) returns(stream FramesResp);
+}

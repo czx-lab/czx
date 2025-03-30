@@ -1,9 +1,17 @@
 package room
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
+
+var (
+	ErrRoomFull  = errors.New("room is full")
+	ErrMaxPlayer = errors.New("max player count exceeded")
+)
 
 type Room struct {
-	opt *Option
+	opt *RoomConf
 
 	// mu is used to protect the room state and the loop
 	mu sync.Mutex
@@ -20,7 +28,7 @@ type Room struct {
 	players map[uint64]struct{}
 }
 
-func NewRoom(opt *Option) *Room {
+func NewRoom(opt *RoomConf) *Room {
 	return &Room{
 		opt:  opt,
 		loop: NewLoop(opt),
@@ -31,13 +39,20 @@ func (r *Room) ID() uint64 {
 	return r.opt.roomID
 }
 
-func (r *Room) Join(playerID uint64) {
+func (r *Room) Join(playerID uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if _, ok := r.players[playerID]; ok {
+		return ErrMaxPlayer
+	}
+	if len(r.players) > r.opt.maxPlayer {
+		return ErrRoomFull
+	}
+
 	r.players[playerID] = struct{}{}
 
-	// todo:: 通知房间内玩家
+	return nil
 }
 
 func (r *Room) Leave(playerID uint64) {

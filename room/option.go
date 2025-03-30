@@ -1,7 +1,6 @@
 package room
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -18,69 +17,54 @@ const (
 
 type (
 	// Option defines custom room options.
-	Option struct {
-		kafkaTopic string
-		pushKey    string
-		roomID     uint64
-		frequency  time.Duration
-		timeout    time.Duration
+	RoomConf struct {
+		roomID uint64
+		// max player count
+		maxPlayer int
+		// frequency of game logic frame processing
+		frequency time.Duration
+		// timeout for game logic frame processing
+		timeout time.Duration
 	}
 
 	// OptionFunc defines the method to customize a Option.
-	OptionFunc func(*Option)
+	OptionFunc func(*RoomConf)
 	IOption    interface {
-		apply(*Option)
+		apply(*RoomConf)
 	}
 )
 
-func (fn OptionFunc) apply(opt *Option) {
+func (fn OptionFunc) apply(opt *RoomConf) {
 	fn(opt)
 }
 
-func NewOption(opts ...IOption) *Option {
-	opt := &Option{
-		roomID:     defaultRoomID,
-		frequency:  frequency,
-		timeout:    timeout,
-		kafkaTopic: topic,
+func NewOption(opts ...IOption) *RoomConf {
+	opt := &RoomConf{
+		roomID:    defaultRoomID,
+		frequency: frequency,
+		timeout:   timeout,
 	}
 	for _, v := range opts {
 		v.apply(opt)
 	}
 
-	if len(opt.pushKey) == 0 {
-		opt.pushKey = fmt.Sprint(opt.roomID)
-	}
 	return opt
 }
 
 func WithRoomID(id uint64) OptionFunc {
-	return func(o *Option) {
+	return func(o *RoomConf) {
 		o.roomID = id
 	}
 }
 
 func WithFrequency(frequency time.Duration) OptionFunc {
-	return func(o *Option) {
+	return func(o *RoomConf) {
 		o.frequency = frequency
 	}
 }
 
 func WithTimeout(timeout time.Duration) OptionFunc {
-	return func(o *Option) {
+	return func(o *RoomConf) {
 		o.timeout = timeout
-	}
-}
-
-func WithTopic(topic string) OptionFunc {
-	return func(o *Option) {
-		o.kafkaTopic = topic
-
-	}
-}
-
-func WithKey(key string) OptionFunc {
-	return func(o *Option) {
-		o.pushKey = key
 	}
 }

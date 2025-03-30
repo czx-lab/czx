@@ -13,16 +13,22 @@ import (
 )
 
 type (
+	// message represents a protobuf message with its ID, type, and handler.
+	// It also contains a raw handler for processing raw data.
 	message struct {
 		id         uint16
 		msgtype    reflect.Type
 		handler    network.Handler
 		rawHandler network.Handler
 	}
+	// raw represents a raw protobuf message with its ID and data.
+	// It is used for processing raw data without unmarshalling it into a specific message type.
 	raw struct {
 		id   uint16
 		data []byte
 	}
+	// Processor is a protobuf message processor that handles marshalling,
+	// unmarshalling, and processing of protobuf messages.
 	Processor struct {
 		ids      map[reflect.Type]uint16
 		messages map[uint16]*message
@@ -30,10 +36,11 @@ type (
 	}
 )
 
-func NewProcessor() *Processor {
+func NewProcessor(opt network.ProcessorConf) *Processor {
 	return &Processor{
 		ids:      make(map[reflect.Type]uint16),
 		messages: make(map[uint16]*message),
+		option:   opt,
 	}
 }
 

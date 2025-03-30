@@ -2,17 +2,14 @@ package room
 
 import (
 	"time"
-
-	"github.com/IBM/sarama"
 )
 
 type Loop struct {
-	opt      *Option
-	producer sarama.AsyncProducer
-	quit     chan struct{}
+	opt  *RoomConf
+	quit chan struct{}
 }
 
-func NewLoop(opt *Option) *Loop {
+func NewLoop(opt *RoomConf) *Loop {
 	return &Loop{
 		opt: opt,
 	}
@@ -34,12 +31,6 @@ LOOP:
 		case <-timeoutTimer.C:
 			break LOOP
 		case <-tickerTick.C:
-			l.producer.Input() <- &sarama.ProducerMessage{
-				Topic:     l.opt.kafkaTopic,
-				Key:       sarama.StringEncoder(l.opt.pushKey),
-				Value:     sarama.ByteEncoder(nil),
-				Timestamp: time.Now(),
-			}
 		case <-l.quit:
 			break LOOP
 		}
