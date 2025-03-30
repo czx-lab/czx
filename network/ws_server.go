@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-type WsServerOption struct {
+type WsServerConf struct {
 	Addr            string
 	CertFile        string
 	KeyFile         string
@@ -22,20 +22,21 @@ type WsServerOption struct {
 }
 
 type WsHandler struct {
-	opt      *WsServerOption
+	opt      *WsServerConf
 	mu       sync.Mutex
 	wg       sync.WaitGroup
 	upgrader websocket.Upgrader
 	conns    WsConns
+	agent    func(*WsConn) Agent
 }
 
 type WsServer struct {
-	opt     *WsServerOption
+	opt     *WsServerConf
 	ln      net.Listener
 	handler *WsHandler
 }
 
-func NewWSServer(opt *WsServerOption) *WsServer {
+func NewWSServer(opt *WsServerConf) *WsServer {
 	return &WsServer{
 		opt: opt,
 	}
@@ -74,10 +75,13 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	handler.conns[conn] = struct{}{}
 
-	wsconn := NewWsConn(conn, &WsConnOption{
+	wsconn := NewWsConn(conn, &WsConnConf{
 		MaxMsgSize:      handler.opt.MaxMsgSize,
 		pendingWriteNum: handler.opt.PendingWriteNum,
 	})
+
+	agent := handler.agent(wsconn)
+	agent.Run()
 
 	wsconn.Close()
 	delete(handler.conns, conn)

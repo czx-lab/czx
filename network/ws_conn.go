@@ -16,8 +16,8 @@ var (
 )
 
 type (
-	WsConns      map[*websocket.Conn]struct{}
-	WsConnOption struct {
+	WsConns    map[*websocket.Conn]struct{}
+	WsConnConf struct {
 		MaxMsgSize      uint32
 		pendingWriteNum int
 	}
@@ -26,7 +26,7 @@ type (
 	// It wraps the gorilla/websocket.Conn type to provide additional functionality.
 	WsConn struct {
 		mu   sync.Mutex
-		opt  *WsConnOption
+		opt  *WsConnConf
 		conn *websocket.Conn
 		// Channel for writing messages to the connection
 		writeChan chan []byte
@@ -37,7 +37,7 @@ type (
 
 var _ Conn = (*WsConn)(nil)
 
-func NewWsConn(conn *websocket.Conn, opt *WsConnOption) *WsConn {
+func NewWsConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
 	wsConn := &WsConn{
 		opt:       opt,
 		conn:      conn,
