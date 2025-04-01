@@ -6,8 +6,11 @@ import (
 )
 
 var (
-	ErrRoomFull  = errors.New("room is full")
-	ErrMaxPlayer = errors.New("max player count exceeded")
+	ErrRoomFull   = errors.New("room is full")
+	ErrMaxPlayer  = errors.New("max player count exceeded")
+	ErrBufferFull = errors.New("buffer is full")
+	ErrNotRunning = errors.New("room is not running")
+	ErrRunning    = errors.New("room is already running")
 )
 
 type Room struct {
@@ -25,18 +28,36 @@ type Room struct {
 	// and to prevent multiple calls to Run()
 	running bool
 
+	// players is used to keep track of the players in the room
+	// and to prevent multiple calls to Join()
 	players map[uint64]struct{}
+
+	// rpcClient is used to send messages to the room
+	// and receive messages from the room
+	processor RoomProcessor
 }
 
-func NewRoom(opt *RoomConf) *Room {
+func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
 	return &Room{
-		opt:  opt,
-		loop: NewLoop(opt),
+		opt:       opt,
+		loop:      NewLoop(msgProcessor, opt),
+		processor: processor,
 	}
 }
 
 func (r *Room) ID() uint64 {
 	return r.opt.roomID
+}
+
+// Message is used to send messages to the room
+// and receive messages from the room
+func (r *Room) WriteMessage(msg []byte) error {
+	if !r.running {
+		return ErrNotRunning
+	}
+
+	// Push the message to the loop
+	return r.loop.Push(msg)
 }
 
 func (r *Room) Join(playerID uint64) error {
@@ -52,24 +73,24 @@ func (r *Room) Join(playerID uint64) error {
 
 	r.players[playerID] = struct{}{}
 
-	return nil
+	return r.processor.Join(playerID)
 }
 
-func (r *Room) Leave(playerID uint64) {
+func (r *Room) Leave(playerID uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	delete(r.players, playerID)
 
-	// todo:: 通知房间内玩家
+	return r.processor.Leave(playerID)
 }
 
-func (r *Room) Run() {
+func (r *Room) Run() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.running {
-		return
+		return ErrRunning
 	}
 
 	r.running = true
@@ -77,8 +98,17 @@ func (r *Room) Run() {
 	go func() {
 		defer r.wg.Done()
 
-		r.loop.Start()
+		if err := r.loop.Start(); err != nil {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+
+			// If the loop fails, we need to stop the room
+			// and set the running state to false
+			r.running = false
+		}
 	}()
+
+	return nil
 }
 
 func (r *Room) Stop() {

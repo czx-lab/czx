@@ -18,6 +18,9 @@ const (
 type (
 	// Option defines custom room options.
 	RoomConf struct {
+		// size of the message buffer
+		maxBufferSize uint64
+		// room id
 		roomID uint64
 		// max player count
 		maxPlayer int
