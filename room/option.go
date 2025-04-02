@@ -11,6 +11,10 @@ const (
 	frequency = time.Second / 30
 	// game logic frame processing timeout
 	timeout = time.Minute * 5
+	// default max player count
+	defaultMaxPlayer = 5
+	// default max buffer size
+	defaultMaxBufferSize = 4096
 )
 
 type (
@@ -26,8 +30,6 @@ type (
 		frequency time.Duration
 		// timeout for game logic frame processing
 		timeout time.Duration
-		// Counter for loop restarts
-		counter int
 	}
 
 	// OptionFunc defines the method to customize a Option.
@@ -43,9 +45,11 @@ func (fn OptionFunc) apply(opt *RoomConf) {
 
 func NewOption(opts ...IOption) *RoomConf {
 	opt := &RoomConf{
-		roomID:    defaultRoomID,
-		frequency: frequency,
-		timeout:   timeout,
+		roomID:        defaultRoomID,
+		frequency:     frequency,
+		timeout:       timeout,
+		maxBufferSize: defaultMaxBufferSize,
+		maxPlayer:     defaultMaxPlayer,
 	}
 	for _, v := range opts {
 		v.apply(opt)
@@ -69,5 +73,17 @@ func WithFrequency(frequency time.Duration) OptionFunc {
 func WithTimeout(timeout time.Duration) OptionFunc {
 	return func(o *RoomConf) {
 		o.timeout = timeout
+	}
+}
+
+func WithMaxPlayer(maxPlayer int) OptionFunc {
+	return func(o *RoomConf) {
+		o.maxPlayer = maxPlayer
+	}
+}
+
+func WithMaxBufferSize(maxBufferSize uint64) OptionFunc {
+	return func(o *RoomConf) {
+		o.maxBufferSize = maxBufferSize
 	}
 }

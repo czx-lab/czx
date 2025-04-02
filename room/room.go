@@ -37,8 +37,6 @@ type Room struct {
 	// msgs is used to send messages to the room
 	// and receive messages from the room
 	msgs chan []byte
-
-	restartCount int // Counter for loop restarts
 }
 
 func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
@@ -50,7 +48,7 @@ func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomCo
 	}
 
 	// Set the stop callback
-	room.loop.stopCallback(room.stop, room.loopPanic)
+	room.loop.stopCallback(room.stop)
 	return room
 }
 
@@ -135,31 +133,6 @@ func (r *Room) stop() {
 		return
 	}
 	r.running = false
-
-	// Reset restart counter
-	r.restartCount = 0
-}
-
-// Handle panic in the loop
-// Check if the loop is running and handle panic
-func (r *Room) loopPanic() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if !r.running {
-		return
-	}
-
-	// Increment the restart counter
-	r.restartCount++
-
-	if r.restartCount <= r.opt.counter {
-		// Attempt to restart the loop after a panic
-		go r.loop.Start()
-	} else {
-		// Stop the room if restart limit is reached
-		r.running = false
-	}
 }
 
 // Stop the room loop and release resources
@@ -168,6 +141,6 @@ func (r *Room) Stop() {
 	r.stop()
 
 	// remove the stop callback
-	r.loop.stopCallback(nil, nil)
+	r.loop.stopCallback(nil)
 	r.loop.Stop()
 }
