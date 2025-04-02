@@ -34,12 +34,13 @@ func (l *Loop) loop() error {
 	defer ticker.Stop()
 
 	timeoutTimer := time.NewTimer(l.opt.timeout)
+	defer timeoutTimer.Stop()
 
 LOOP:
 	for {
 		select {
 		case <-timeoutTimer.C:
-			l.Stop()
+			break LOOP
 		case <-ticker.C:
 			// Process one message per tick if available
 			select {
@@ -52,6 +53,8 @@ LOOP:
 				if err := l.processor.HandleIdle(); err != nil {
 					l.Stop()
 				}
+
+				timeoutTimer.Reset(l.opt.timeout)
 			}
 		case <-l.quit:
 			break LOOP
