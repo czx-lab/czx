@@ -140,6 +140,8 @@ func (r *Room) stop() {
 	r.restartCount = 0
 }
 
+// Handle panic in the loop
+// Check if the loop is running and handle panic
 func (r *Room) loopPanic() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

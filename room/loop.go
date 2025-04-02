@@ -29,10 +29,12 @@ func (l *Loop) Start() error {
 		if r := recover(); r != nil {
 			// Log the panic (optional)
 			// fmt.Printf("Loop panic: %v\n", r)
-			if l.onPanicStop != nil {
-				// Notify Room about the panic
-				l.onPanicStop()
+			if l.onPanicStop == nil {
+				return
 			}
+
+			// Notify Room about the panic
+			l.onPanicStop()
 		}
 	}()
 
