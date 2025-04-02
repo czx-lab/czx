@@ -7,8 +7,6 @@ import (
 const (
 	// default room id
 	defaultRoomID uint64 = 1
-	// kafka message topic
-	topic = "room_frames"
 	// game logic frame processing frequency
 	frequency = time.Second / 30
 	// game logic frame processing timeout
@@ -28,6 +26,8 @@ type (
 		frequency time.Duration
 		// timeout for game logic frame processing
 		timeout time.Duration
+		// Counter for loop restarts
+		counter int
 	}
 
 	// OptionFunc defines the method to customize a Option.

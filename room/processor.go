@@ -17,7 +17,6 @@ type MessageProcessor interface {
 	// HandleIdle is called when the loop is idle
 	// It is responsible for handling idle timeouts and other idle tasks
 	HandleIdle() error
-
-	Close() error
 	// Stop is called when the loop is stopped
+	Close() error
 }

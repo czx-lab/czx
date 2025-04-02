@@ -18,8 +18,6 @@ type Room struct {
 
 	// mu is used to protect the room state and the loop
 	mu sync.Mutex
-	// wg is used to wait for the loop to finish
-	wg sync.WaitGroup
 	// loop is used to run the room loop
 	// and send messages to Kafka
 	// and receive messages from Kafka
@@ -35,14 +33,25 @@ type Room struct {
 	// rpcClient is used to send messages to the room
 	// and receive messages from the room
 	processor RoomProcessor
+
+	// msgs is used to send messages to the room
+	// and receive messages from the room
+	msgs chan []byte
+
+	restartCount int // Counter for loop restarts
 }
 
 func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
-	return &Room{
+	room := &Room{
 		opt:       opt,
+		msgs:      make(chan []byte, opt.maxBufferSize),
 		loop:      NewLoop(msgProcessor, opt),
 		processor: processor,
 	}
+
+	// Set the stop callback
+	room.loop.stopCallback(room.stop, room.loopPanic)
+	return room
 }
 
 func (r *Room) ID() uint64 {
@@ -52,14 +61,26 @@ func (r *Room) ID() uint64 {
 // Message is used to send messages to the room
 // and receive messages from the room
 func (r *Room) WriteMessage(msg []byte) error {
+	if r.msgs == nil {
+		r.msgs = make(chan []byte, r.opt.maxBufferSize)
+	}
+	if len(r.msgs) >= cap(r.msgs) {
+		// if the buffer is full, drop the message
+		// and return an error
+		return ErrBufferFull
+	}
 	if !r.running {
+		// if the room is not running, drop the message
+		// and return an error
 		return ErrNotRunning
 	}
 
-	// Push the message to the loop
-	return r.loop.Push(msg)
+	r.msgs <- msg
+	return nil
 }
 
+// Join is used to add a player to the room
+// and to prevent multiple calls to Join()
 func (r *Room) Join(playerID uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -76,6 +97,8 @@ func (r *Room) Join(playerID uint64) error {
 	return r.processor.Join(playerID)
 }
 
+// Leave is used to remove a player from the room
+// and to prevent multiple calls to Leave()
 func (r *Room) Leave(playerID uint64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -85,6 +108,8 @@ func (r *Room) Leave(playerID uint64) error {
 	return r.processor.Leave(playerID)
 }
 
+// Start the room loop and process messages
+// in a separate goroutine. It will run until the loop is stopped or an error occurs.
 func (r *Room) Run() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -94,24 +119,15 @@ func (r *Room) Run() error {
 	}
 
 	r.running = true
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
 
-		if err := r.loop.Start(); err != nil {
-			r.mu.Lock()
-			defer r.mu.Unlock()
-
-			// If the loop fails, we need to stop the room
-			// and set the running state to false
-			r.running = false
-		}
-	}()
+	// Directly start the loop in a goroutine
+	go r.loop.Start()
 
 	return nil
 }
 
-func (r *Room) Stop() {
+// stop the room loop and release resources
+func (r *Room) stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -120,6 +136,36 @@ func (r *Room) Stop() {
 	}
 	r.running = false
 
+	// Reset restart counter
+	r.restartCount = 0
+}
+
+func (r *Room) loopPanic() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.running {
+		return
+	}
+
+	// Increment the restart counter
+	r.restartCount++
+
+	if r.restartCount <= r.opt.counter {
+		// Attempt to restart the loop after a panic
+		go r.loop.Start()
+	} else {
+		// Stop the room if restart limit is reached
+		r.running = false
+	}
+}
+
+// Stop the room loop and release resources
+// Stop the loop and release resources
+func (r *Room) Stop() {
+	r.stop()
+
+	// remove the stop callback
+	r.loop.stopCallback(nil, nil)
 	r.loop.Stop()
-	r.wg.Wait()
 }

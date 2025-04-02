@@ -10,6 +10,9 @@ type Loop struct {
 	processor MessageProcessor
 	// buffered channel to hold messages
 	msgs chan []byte
+	// callback to be called when the loop stops
+	onStop      func()
+	onPanicStop func()
 }
 
 func NewLoop(processor MessageProcessor, opt *RoomConf) *Loop {
@@ -22,6 +25,17 @@ func NewLoop(processor MessageProcessor, opt *RoomConf) *Loop {
 }
 
 func (l *Loop) Start() error {
+	defer func() {
+		if r := recover(); r != nil {
+			// Log the panic (optional)
+			// fmt.Printf("Loop panic: %v\n", r)
+			if l.onPanicStop != nil {
+				// Notify Room about the panic
+				l.onPanicStop()
+			}
+		}
+	}()
+
 	return l.loop()
 }
 
@@ -56,11 +70,19 @@ LOOP:
 		}
 	}
 
+	if l.onStop != nil {
+		l.onStop()
+	}
+
 	return l.processor.Close()
 }
 
+// Stop the loop and close the quit channel
 func (l *Loop) Stop() {
 	close(l.quit)
+	if l.onStop != nil {
+		l.onStop() // Notify via callback
+	}
 }
 
 // Push is used to send messages to the room
@@ -69,6 +91,14 @@ func (l *Loop) Push(msg []byte) error {
 	if len(l.msgs) >= cap(l.msgs) {
 		return ErrBufferFull
 	}
+
 	l.msgs <- msg
 	return nil
+}
+
+// StopCallback is used to set a callback function
+// that will be called when the loop stops.
+func (l *Loop) stopCallback(callback, panicCallback func()) {
+	l.onStop = callback
+	l.onPanicStop = panicCallback
 }
