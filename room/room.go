@@ -105,10 +105,7 @@ func (r *Room) Start() error {
 
 	r.running = true
 
-	// Directly start the loop in a goroutine
-	go r.loop.Start()
-
-	return nil
+	return r.loop.Start()
 }
 
 // stop the room loop and release resources

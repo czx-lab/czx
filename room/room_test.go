@@ -86,3 +86,45 @@ func TestRoom(t *testing.T) {
 		}
 	})
 }
+
+func TestRoomManager(t *testing.T) {
+	t.Run("room manager test", func(t *testing.T) {
+		rm := NewRoomManager()
+
+		opt := NewOption(
+			WithRoomID(1),
+			WithMaxPlayer(5),
+			WithMaxBufferSize(4096),
+			WithFrequency(30*time.Millisecond),
+			// WithTimeout(10*time.Second),
+			WithHeartbeat(3*time.Second),
+		)
+		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
+
+		if err := rm.AddRoom(room); err != nil {
+			t.Errorf("add room err %v", err)
+		}
+
+		time.AfterFunc(10*time.Second, func() {
+			room.WriteMessage(Message{
+				PlayerID: 2,
+				Msg:      []byte{'m', 'e', '2'},
+			})
+
+			room.Join(10)
+			room.Join(11)
+			room.Join(12)
+			time.AfterFunc(time.Second, func() {
+				room.Leave(10)
+
+				if err := rm.RemoveRoom(room.ID()); err != nil {
+					t.Errorf("remove room err %v", err)
+				}
+			})
+		})
+
+		for {
+
+		}
+	})
+}
