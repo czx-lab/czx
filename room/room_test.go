@@ -118,10 +118,6 @@ func TestRoomManager(t *testing.T) {
 		time.AfterFunc(time.Second, func() {
 			room.Leave(10)
 
-			if err := rm.RemoveRoom(room.ID()); err != nil {
-				t.Errorf("remove room err %v", err)
-			}
-
 			// rm.Stop()
 		})
 

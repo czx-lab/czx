@@ -49,22 +49,6 @@ func (rm *RoomManager) AddRoom(room *Room) error {
 	return nil
 }
 
-// RemoveRoom removes a room from the manager by its ID.
-func (rm *RoomManager) RemoveRoom(roomID uint64) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-	room, exists := rm.rooms[roomID]
-	if !exists {
-		return ErrRoomNotFound
-	}
-
-	// rm.rooms[roomID] = nil
-
-	room.Stop()
-
-	return nil
-}
-
 // GetRoom retrieves a room by its ID.
 func (rm *RoomManager) GetRoom(roomID uint64) (*Room, error) {
 	rm.mu.RLock()
