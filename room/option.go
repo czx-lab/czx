@@ -15,6 +15,9 @@ const (
 	defaultMaxPlayer = 5
 	// default max buffer size
 	defaultMaxBufferSize = 4096
+	// default heartbeat frequency
+	defaultHeartbeatFrequency = time.Second * 10
+	defaultBatchSize          = 1
 )
 
 type (
@@ -26,10 +29,13 @@ type (
 		roomID uint64
 		// max player count
 		maxPlayer int
+		// batch size for processing messages
+		batchSize int
 		// frequency of game logic frame processing
 		frequency time.Duration
 		// timeout for game logic frame processing
-		timeout time.Duration
+		timeout            time.Duration
+		heartbeatFrequency time.Duration
 	}
 
 	// OptionFunc defines the method to customize a Option.
@@ -45,11 +51,13 @@ func (fn OptionFunc) apply(opt *RoomConf) {
 
 func NewOption(opts ...IOption) *RoomConf {
 	opt := &RoomConf{
-		roomID:        defaultRoomID,
-		frequency:     frequency,
-		timeout:       timeout,
-		maxBufferSize: defaultMaxBufferSize,
-		maxPlayer:     defaultMaxPlayer,
+		roomID:             defaultRoomID,
+		frequency:          frequency,
+		timeout:            timeout,
+		maxBufferSize:      defaultMaxBufferSize,
+		maxPlayer:          defaultMaxPlayer,
+		heartbeatFrequency: defaultHeartbeatFrequency,
+		batchSize:          defaultBatchSize,
 	}
 	for _, v := range opts {
 		v.apply(opt)
@@ -85,5 +93,17 @@ func WithMaxPlayer(maxPlayer int) OptionFunc {
 func WithMaxBufferSize(maxBufferSize uint64) OptionFunc {
 	return func(o *RoomConf) {
 		o.maxBufferSize = maxBufferSize
+	}
+}
+
+func WithHeartbeat(heartbeat time.Duration) OptionFunc {
+	return func(o *RoomConf) {
+		o.heartbeatFrequency = heartbeat
+	}
+}
+
+func WithBatchSize(batchSize int) OptionFunc {
+	return func(o *RoomConf) {
+		o.batchSize = batchSize
 	}
 }

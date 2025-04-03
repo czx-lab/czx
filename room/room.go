@@ -33,18 +33,14 @@ type Room struct {
 	// rpcClient is used to send messages to the room
 	// and receive messages from the room
 	processor RoomProcessor
-
-	// msgs is used to send messages to the room
-	// and receive messages from the room
-	msgs chan []byte
 }
 
 func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
 	room := &Room{
 		opt:       opt,
-		msgs:      make(chan []byte, opt.maxBufferSize),
 		loop:      NewLoop(msgProcessor, opt),
 		processor: processor,
+		players:   make(map[uint64]struct{}),
 	}
 
 	// Set the stop callback
@@ -58,23 +54,14 @@ func (r *Room) ID() uint64 {
 
 // Message is used to send messages to the room
 // and receive messages from the room
-func (r *Room) WriteMessage(msg []byte) error {
-	if r.msgs == nil {
-		r.msgs = make(chan []byte, r.opt.maxBufferSize)
-	}
-	if len(r.msgs) >= cap(r.msgs) {
-		// if the buffer is full, drop the message
-		// and return an error
-		return ErrBufferFull
-	}
+func (r *Room) WriteMessage(msg Message) error {
 	if !r.running {
 		// if the room is not running, drop the message
 		// and return an error
 		return ErrNotRunning
 	}
 
-	r.msgs <- msg
-	return nil
+	return r.loop.Push(msg)
 }
 
 // Join is used to add a player to the room
@@ -108,7 +95,7 @@ func (r *Room) Leave(playerID uint64) error {
 
 // Start the room loop and process messages
 // in a separate goroutine. It will run until the loop is stopped or an error occurs.
-func (r *Room) Run() error {
+func (r *Room) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
