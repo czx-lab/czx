@@ -138,7 +138,7 @@ func (w *WsConn) Write(args ...[]byte) error {
 	}
 
 	var msgLen uint32
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		msgLen += uint32(len(args[i]))
 	}
 
@@ -157,11 +157,12 @@ func (w *WsConn) Write(args ...[]byte) error {
 
 	msg := make([]byte, msgLen)
 	l := 0
-	for i := 0; i < len(args); i++ {
+	for i := range args {
 		copy(msg[l:], args[i])
 		l += len(args[i])
 	}
 
 	w.doWrite(msg)
+
 	return nil
 }

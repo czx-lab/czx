@@ -90,6 +90,19 @@ func (a *agent) Write(msg any) error {
 	return a.conn.Write(data...)
 }
 
+// WriteWithError implements network.Agent.
+func (a *agent) WriteWithError(code int, msg any) error {
+	if a.gate.processor == nil {
+		return ProcessorErr
+	}
+
+	data, err := a.gate.processor.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return a.conn.Write(data...)
+}
+
 // Close implements Agent.
 func (a *agent) Close() {
 	a.conn.Close()
