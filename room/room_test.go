@@ -115,11 +115,8 @@ func TestRoomManager(t *testing.T) {
 		room.Join(10)
 		room.Join(11)
 		room.Join(12)
-		time.AfterFunc(time.Second, func() {
-			room.Leave(10)
 
-			// rm.Stop()
-		})
+		room.Leave(10)
 
 		rm.Stop()
 

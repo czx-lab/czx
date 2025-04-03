@@ -42,8 +42,6 @@ func (rm *RoomManager) AddRoom(room *Room) error {
 		if err := room.Start(); err != nil {
 			println("Error starting room:", err.Error())
 		}
-
-		fmt.Println("ok")
 	}()
 
 	return nil
@@ -62,16 +60,11 @@ func (rm *RoomManager) GetRoom(roomID uint64) (*Room, error) {
 	return room, nil
 }
 
-// ListRooms returns a list of all room IDs.
-func (rm *RoomManager) ListRooms() []uint64 {
+func (rm *RoomManager) RoomNum() int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	ids := make([]uint64, 0, len(rm.rooms))
-	for id := range rm.rooms {
-		ids = append(ids, id)
-	}
-	return ids
+	return len(rm.rooms)
 }
 
 // Stop stops all rooms managed by the RoomManager.
