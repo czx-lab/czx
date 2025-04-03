@@ -105,23 +105,27 @@ func TestRoomManager(t *testing.T) {
 			t.Errorf("add room err %v", err)
 		}
 
-		time.AfterFunc(10*time.Second, func() {
-			room.WriteMessage(Message{
-				PlayerID: 2,
-				Msg:      []byte{'m', 'e', '2'},
-			})
+		fmt.Println(111111)
 
-			room.Join(10)
-			room.Join(11)
-			room.Join(12)
-			time.AfterFunc(time.Second, func() {
-				room.Leave(10)
-
-				if err := rm.RemoveRoom(room.ID()); err != nil {
-					t.Errorf("remove room err %v", err)
-				}
-			})
+		room.WriteMessage(Message{
+			PlayerID: 2,
+			Msg:      []byte{'m', 'e', '2'},
 		})
+
+		room.Join(10)
+		room.Join(11)
+		room.Join(12)
+		time.AfterFunc(time.Second, func() {
+			room.Leave(10)
+
+			if err := rm.RemoveRoom(room.ID()); err != nil {
+				t.Errorf("remove room err %v", err)
+			}
+
+			// rm.Stop()
+		})
+
+		rm.Stop()
 
 		for {
 

@@ -96,15 +96,17 @@ func (r *Room) Leave(playerID uint64) error {
 // Start the room loop and process messages
 // in a separate goroutine. It will run until the loop is stopped or an error occurs.
 func (r *Room) Start() error {
+	// Remove the lock here to avoid potential deadlocks
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if r.running {
+		r.mu.Unlock()
 		return ErrRunning
 	}
 
 	r.running = true
+	r.mu.Unlock()
 
+	// Start the loop without holding the lock
 	return r.loop.Start()
 }
 
@@ -124,7 +126,9 @@ func (r *Room) stop() {
 func (r *Room) Stop() {
 	r.stop()
 
-	// remove the stop callback
+	// Remove the stop callback.
 	r.loop.stopCallback(nil)
+
+	// Stop the loop synchronously to ensure proper cleanup.
 	r.loop.Stop()
 }

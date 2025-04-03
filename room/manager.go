@@ -2,6 +2,7 @@ package room
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -36,19 +37,13 @@ func (rm *RoomManager) AddRoom(room *Room) error {
 
 	rm.wg.Add(1)
 	go func() {
-		defer func() {
-			rm.mu.Lock()
-			delete(rm.rooms, room.ID())
-			rm.mu.Unlock()
-
-			rm.wg.Done()
-		}()
+		defer rm.wg.Done()
 
 		if err := room.Start(); err != nil {
-			// Handle error (e.g., log it)
-			// For now, just print it
 			println("Error starting room:", err.Error())
 		}
+
+		fmt.Println("ok")
 	}()
 
 	return nil
@@ -58,12 +53,15 @@ func (rm *RoomManager) AddRoom(room *Room) error {
 func (rm *RoomManager) RemoveRoom(roomID uint64) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
-
-	if _, exists := rm.rooms[roomID]; !exists {
+	room, exists := rm.rooms[roomID]
+	if !exists {
 		return ErrRoomNotFound
 	}
 
-	delete(rm.rooms, roomID)
+	// rm.rooms[roomID] = nil
+
+	room.Stop()
+
 	return nil
 }
 
@@ -98,9 +96,17 @@ func (rm *RoomManager) Stop() {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
+	// Stop all rooms synchronously.
 	for _, room := range rm.rooms {
 		room.Stop()
 	}
-	rm.wg.Wait()
+
+	// Clear the rooms map before waiting for all rooms to stop.
 	rm.rooms = make(map[uint64]*Room)
+
+	fmt.Println("waiting for all rooms to stop")
+	rm.wg.Wait()
+
+	// Log after all rooms have stopped.
+	fmt.Println("stopped all rooms")
 }

@@ -89,10 +89,9 @@ LOOP:
 func (l *Loop) Stop() {
 	l.stopOnce.Do(func() {
 		close(l.quit)
-		if l.onStop != nil {
+		if l.onStop == nil {
 			return
 		}
-
 		l.onStop() // Notify via callback
 	})
 }
