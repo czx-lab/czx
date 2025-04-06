@@ -20,4 +20,8 @@ type Agent interface {
 	Destroy()
 	// OnClose is called when the connection is closed.
 	OnClose()
+	// SetUserData sets user data for the connection.
+	SetUserData(data any)
+	// GetUserData retrieves user data for the connection.
+	GetUserData() any
 }

@@ -27,8 +27,9 @@ type (
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
 	agent struct {
-		conn network.Conn
-		gate *Gate
+		conn     network.Conn
+		gate     *Gate
+		userdata any
 	}
 )
 
@@ -152,4 +153,14 @@ func (a *agent) LocalAddr() net.Addr {
 // RemoteAddr implements Agent.
 func (a *agent) RemoteAddr() net.Addr {
 	return a.conn.RemoteAddr()
+}
+
+// GetUserData implements network.Agent.
+func (a *agent) GetUserData() any {
+	return a.userdata
+}
+
+// SetUserData implements network.Agent.
+func (a *agent) SetUserData(data any) {
+	a.userdata = data
 }
