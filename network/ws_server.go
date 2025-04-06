@@ -63,17 +63,19 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer handler.wg.Done()
 
 	handler.mu.Lock()
-	defer handler.mu.Unlock()
 
 	// Check if the maximum number of connections has been reached
 	// If so, close the connection and return an error response
 	if len(handler.conns) >= handler.opt.MaxConn {
+		handler.mu.Unlock()
 		conn.Close()
 		http.Error(w, "Too many connections", http.StatusServiceUnavailable)
 		return
 	}
 
 	handler.conns[conn] = struct{}{}
+
+	handler.mu.Unlock()
 
 	wsconn := NewWsConn(conn, &WsConnConf{
 		MaxMsgSize:      handler.opt.MaxMsgSize,
@@ -84,7 +86,11 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agent.Run()
 
 	wsconn.Close()
+
+	handler.mu.Lock()
 	delete(handler.conns, conn)
+	handler.mu.Unlock()
+	agent.OnClose()
 }
 
 // Start starts the WebSocket server and listens for incoming connections.
@@ -136,11 +142,14 @@ func (server *WsServer) Stop() {
 
 	server.handler.mu.Lock()
 
-	defer server.handler.mu.Unlock()
 	for conn := range server.handler.conns {
 		conn.Close()
 	}
+
+	// Clear the connections map to prevent new connections from being accepted
+	// and to allow the goroutine to exit cleanly.
 	server.handler.conns = nil
+	server.handler.mu.Unlock()
 
 	server.handler.wg.Wait()
 }

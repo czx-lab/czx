@@ -18,4 +18,6 @@ type Agent interface {
 	Close()
 	// Destroy cleans up the agent and releases resources.
 	Destroy()
+	// OnClose is called when the connection is closed.
+	OnClose()
 }

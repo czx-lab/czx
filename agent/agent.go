@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"czx/event"
 	"czx/network"
 	"errors"
 	"net"
@@ -21,6 +22,7 @@ type (
 		option    GateConf
 		processor network.Processor
 		wsSrv     *network.WsServer
+		eventBus  *event.EventBus
 	}
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
@@ -38,11 +40,30 @@ func NewGate(opt GateConf) *Gate {
 	}
 }
 
+// WithProcessor sets the processor for the Gate instance.
+// The processor is responsible for marshaling and unmarshaling messages.
+func (g *Gate) WithProcessor(processor network.Processor) *Gate {
+	g.processor = processor
+	return g
+}
+
+// WithEventBus sets the event bus for the Gate instance.
+// The event bus is used for publishing and subscribing to events.
+func (g *Gate) WithEventBus(bus *event.EventBus) *Gate {
+	g.eventBus = bus
+	return g
+}
+
 func (g *Gate) Start() {
-	var wsServer *network.WsServer
+	// Default event bus
+	// If no event bus is provided, use the default event bus.
+	if g.eventBus == nil {
+		g.eventBus = event.DefaultBus
+	}
+
 	if len(g.option.WsServerConf.Addr) > 0 {
-		wsServer = network.NewWSServer(&g.option.WsServerConf)
-		wsServer.Start()
+		g.wsSrv = network.NewWSServer(&g.option.WsServerConf)
+		g.wsSrv.Start()
 	}
 
 	// Handle graceful shutdown on Ctrl+C
@@ -50,10 +71,18 @@ func (g *Gate) Start() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	<-sig
-	g.wsSrv.Stop()
+	if g.wsSrv != nil {
+		g.wsSrv.Stop()
+	}
 }
 
-func (g *Gate) Stop() {
+// OnClose implements network.Agent.
+func (a *agent) OnClose() {
+	if a.gate.eventBus == nil {
+		return
+	}
+
+	a.gate.eventBus.Publish(event.EvtAgentClose, a)
 }
 
 func (a *agent) Run() {
