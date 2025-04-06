@@ -89,18 +89,18 @@ func (a *agent) Run() {
 	for {
 		data, err := a.conn.Read()
 		if err != nil {
-			// todo:: Handle error
+			// Log or handle the error
 			break
 		}
 
 		if a.gate.processor != nil {
 			msg, err := a.gate.processor.Unmarshal(data)
 			if err != nil {
-				// todo:: Handle error
+				// Log or handle the error
 				break
 			}
 			if err = a.gate.processor.Process(msg); err != nil {
-				//	todo:: Handle error
+				// Log or handle the error
 				break
 			}
 		}

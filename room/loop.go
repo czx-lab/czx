@@ -1,7 +1,6 @@
 package room
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -45,27 +44,21 @@ LOOP:
 	for {
 		select {
 		case <-ticker.C:
-			// Batch process messages to improve efficiency
-		BatchLoop:
-			for range l.opt.batchSize {
-				select {
-				case msg := <-l.msgs:
-					if err := l.processor.Process(msg); err != nil {
-						fmt.Println("Error processing message:", err)
-						// Log the error but continue the loop
-					}
-
-					// Update the last activity time
-					// This is to ensure that the heartbeat logic works correctly
-					lastActivity = time.Now()
-				default:
-					// No more messages to process, exit batch loop
-					break BatchLoop
+			select {
+			case msg := <-l.msgs:
+				if err := l.processor.Process(msg); err != nil {
+					l.Stop()
+					break
 				}
+
+				// Update the last activity time
+				// This is to ensure that the heartbeat logic works correctly
+				lastActivity = time.Now()
 			}
 		case <-heartbeatTicker.C:
 			if err := l.processor.HandleIdle(); err != nil {
-				fmt.Println("Error during idle handling:", err)
+				l.Stop()
+				break
 			}
 
 			// Unified idle handling and timeout logic
@@ -75,7 +68,6 @@ LOOP:
 
 			if time.Since(lastActivity) > l.opt.timeout {
 				l.Stop()
-				break LOOP
 			}
 		case <-l.quit:
 			break LOOP
@@ -89,6 +81,7 @@ LOOP:
 func (l *Loop) Stop() {
 	l.stopOnce.Do(func() {
 		close(l.quit)
+
 		if l.onStop == nil {
 			return
 		}

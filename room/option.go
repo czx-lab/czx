@@ -17,7 +17,6 @@ const (
 	defaultMaxBufferSize = 4096
 	// default heartbeat frequency
 	defaultHeartbeatFrequency = time.Second * 10
-	defaultBatchSize          = 1
 )
 
 type (
@@ -29,8 +28,6 @@ type (
 		roomID uint64
 		// max player count
 		maxPlayer int
-		// batch size for processing messages
-		batchSize int
 		// frequency of game logic frame processing
 		frequency time.Duration
 		// timeout for game logic frame processing
@@ -57,7 +54,6 @@ func NewOption(opts ...IOption) *RoomConf {
 		maxBufferSize:      defaultMaxBufferSize,
 		maxPlayer:          defaultMaxPlayer,
 		heartbeatFrequency: defaultHeartbeatFrequency,
-		batchSize:          defaultBatchSize,
 	}
 	for _, v := range opts {
 		v.apply(opt)
@@ -99,11 +95,5 @@ func WithMaxBufferSize(maxBufferSize uint64) OptionFunc {
 func WithHeartbeat(heartbeat time.Duration) OptionFunc {
 	return func(o *RoomConf) {
 		o.heartbeatFrequency = heartbeat
-	}
-}
-
-func WithBatchSize(batchSize int) OptionFunc {
-	return func(o *RoomConf) {
-		o.batchSize = batchSize
 	}
 }

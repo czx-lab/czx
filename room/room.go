@@ -73,13 +73,19 @@ func (r *Room) Join(playerID uint64) error {
 	if _, ok := r.players[playerID]; ok {
 		return ErrMaxPlayer
 	}
-	if len(r.players) > r.opt.maxPlayer {
+	if len(r.players) >= r.opt.maxPlayer {
 		return ErrRoomFull
 	}
 
 	r.players[playerID] = struct{}{}
 
-	return r.processor.Join(playerID)
+	if err := r.processor.Join(playerID); err != nil {
+		delete(r.players, playerID)
+		// If the player is already in the room, remove it
+		return err
+	}
+
+	return nil
 }
 
 // Leave is used to remove a player from the room
