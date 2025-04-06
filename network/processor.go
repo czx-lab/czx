@@ -22,7 +22,9 @@ type (
 		Unmarshal(data []byte) (any, error)
 		// Marshal converts the message to a byte slice.
 		// It returns a slice of byte slices to support fragmentation.
-		Marshal(msg any) ([][]byte, error)
+		Marshal(msgs any) ([][]byte, error)
+		// MarshalWithCode converts the message to a byte slice with a specific code.
+		MarshalWithCode(code uint16, msg any) ([][]byte, error)
 		// Register registers a message type with an ID.
 		Register(id uint16, msg proto.Message) error
 		// RegisterHandler registers a handler for a message type.

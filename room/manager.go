@@ -2,7 +2,6 @@ package room
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 )
 
@@ -60,6 +59,7 @@ func (rm *RoomManager) GetRoom(roomID uint64) (*Room, error) {
 	return room, nil
 }
 
+// RoomNum returns the number of rooms managed by the RoomManager.
 func (rm *RoomManager) RoomNum() int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
@@ -81,9 +81,5 @@ func (rm *RoomManager) Stop() {
 	// Clear the rooms map before waiting for all rooms to stop.
 	rm.rooms = make(map[uint64]*Room)
 
-	fmt.Println("waiting for all rooms to stop")
 	rm.wg.Wait()
-
-	// Log after all rooms have stopped.
-	fmt.Println("stopped all rooms")
 }

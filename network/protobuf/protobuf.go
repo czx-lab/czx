@@ -52,15 +52,32 @@ func (p *Processor) Marshal(msg any) ([][]byte, error) {
 		return nil, fmt.Errorf("protobuf: message %v not registered", msgtype)
 	}
 
-	bid := make([]byte, 2)
+	msgid := make([]byte, 2)
 	if p.option.LittleEndian {
-		binary.LittleEndian.PutUint16(bid, id)
+		binary.LittleEndian.PutUint16(msgid, id)
 	} else {
-		binary.BigEndian.PutUint16(bid, id)
+		binary.BigEndian.PutUint16(msgid, id)
 	}
 
 	data, err := proto.Marshal(msg.(proto.Message))
-	return [][]byte{bid, data}, err
+	return [][]byte{msgid, data}, err
+}
+
+// MarshalWithCode implements network.Processor.
+func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
+	msgs, err := p.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+
+	msgcode := make([]byte, 2)
+	if p.option.LittleEndian {
+		binary.LittleEndian.PutUint16(msgcode, code)
+	} else {
+		binary.BigEndian.PutUint16(msgcode, code)
+	}
+
+	return [][]byte{msgs[0], msgcode, msgs[1]}, nil
 }
 
 // Process implements network.Processor.

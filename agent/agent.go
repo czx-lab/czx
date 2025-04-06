@@ -78,6 +78,7 @@ func (a *agent) Run() {
 	}
 }
 
+// Write implements network.Agent.
 func (a *agent) Write(msg any) error {
 	if a.gate.processor == nil {
 		return ProcessorErr
@@ -90,16 +91,17 @@ func (a *agent) Write(msg any) error {
 	return a.conn.Write(data...)
 }
 
-// WriteWithError implements network.Agent.
-func (a *agent) WriteWithError(code int, msg any) error {
+// WriteWithCode implements network.Agent.
+func (a *agent) WriteWithCode(code uint16, msg any) error {
 	if a.gate.processor == nil {
 		return ProcessorErr
 	}
 
-	data, err := a.gate.processor.Marshal(msg)
+	data, err := a.gate.processor.MarshalWithCode(code, msg)
 	if err != nil {
 		return err
 	}
+
 	return a.conn.Write(data...)
 }
 
