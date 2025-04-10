@@ -1,7 +1,8 @@
-package network
+package ws
 
 import (
 	"crypto/tls"
+	"czx/network"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,7 +28,7 @@ type WsHandler struct {
 	wg       sync.WaitGroup
 	upgrader websocket.Upgrader
 	conns    WsConns
-	agent    func(*WsConn) Agent
+	agent    func(*WsConn) network.Agent
 }
 
 type WsServer struct {
@@ -36,7 +37,7 @@ type WsServer struct {
 	handler *WsHandler
 }
 
-func NewWSServer(opt *WsServerConf) *WsServer {
+func NewServer(opt *WsServerConf) *WsServer {
 	return &WsServer{
 		opt: opt,
 	}
@@ -77,7 +78,7 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	handler.mu.Unlock()
 
-	wsconn := NewWsConn(conn, &WsConnConf{
+	wsconn := NewConn(conn, &WsConnConf{
 		MaxMsgSize:      handler.opt.MaxMsgSize,
 		pendingWriteNum: handler.opt.PendingWriteNum,
 	})

@@ -3,6 +3,7 @@ package agent
 import (
 	"czx/event"
 	"czx/network"
+	"czx/network/ws"
 	"errors"
 	"net"
 	"os"
@@ -11,17 +12,17 @@ import (
 )
 
 var (
-	ProcessorErr = errors.New("processor is nil")
+	ErrProcessorNotFound = errors.New("processor not found")
 )
 
 type (
 	GateConf struct {
-		network.WsServerConf
+		ws.WsServerConf
 	}
 	Gate struct {
 		option    GateConf
 		processor network.Processor
-		wsSrv     *network.WsServer
+		wsSrv     *ws.WsServer
 		eventBus  *event.EventBus
 	}
 	// agent implements network.Agent interface
@@ -63,7 +64,7 @@ func (g *Gate) Start() {
 	}
 
 	if len(g.option.WsServerConf.Addr) > 0 {
-		g.wsSrv = network.NewWSServer(&g.option.WsServerConf)
+		g.wsSrv = ws.NewServer(&g.option.WsServerConf)
 		g.wsSrv.Start()
 	}
 
@@ -111,7 +112,7 @@ func (a *agent) Run() {
 // Write implements network.Agent.
 func (a *agent) Write(msg any) error {
 	if a.gate.processor == nil {
-		return ProcessorErr
+		return ErrProcessorNotFound
 	}
 
 	data, err := a.gate.processor.Marshal(msg)
@@ -124,7 +125,7 @@ func (a *agent) Write(msg any) error {
 // WriteWithCode implements network.Agent.
 func (a *agent) WriteWithCode(code uint16, msg any) error {
 	if a.gate.processor == nil {
-		return ProcessorErr
+		return ErrProcessorNotFound
 	}
 
 	data, err := a.gate.processor.MarshalWithCode(code, msg)

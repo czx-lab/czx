@@ -1,6 +1,7 @@
-package network
+package ws
 
 import (
+	"czx/network"
 	"errors"
 	"net"
 	"sync"
@@ -10,9 +11,9 @@ import (
 
 var (
 	// ErrConnClosed is returned when the connection is closed.
-	ErrConnClosed   = errors.New("connection closed")
-	MessageTooLong  = errors.New("message too long")
-	MessageTooShort = errors.New("message too short")
+	ErrConnClosed      = errors.New("connection closed")
+	ErrMessageTooLong  = errors.New("message too long")
+	ErrMessageTooShort = errors.New("message too short")
 )
 
 type (
@@ -35,9 +36,9 @@ type (
 	}
 )
 
-var _ Conn = (*WsConn)(nil)
+var _ network.Conn = (*WsConn)(nil)
 
-func NewWsConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
+func NewConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
 	wsConn := &WsConn{
 		opt:       opt,
 		conn:      conn,
@@ -143,11 +144,11 @@ func (w *WsConn) Write(args ...[]byte) error {
 	}
 
 	if msgLen > w.opt.MaxMsgSize {
-		return MessageTooLong
+		return ErrMessageTooLong
 	}
 
 	if msgLen < 1 {
-		return MessageTooShort
+		return ErrMessageTooShort
 	}
 
 	if len(args) == 1 {
