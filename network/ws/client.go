@@ -64,6 +64,15 @@ func NewClient(conf *WsClientConf) *WsClient {
 	}
 }
 
+// WithAgent sets the agent for the client
+// The agent is responsible for handling messages and events
+func (c *WsClient) WithAgent(agent func(*WsConn) network.Agent) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.agent = agent
+}
+
 // Start the client and establish connections to the server
 func (c *WsClient) Start() {
 	// Set the maximum number of connections to the server
@@ -87,13 +96,13 @@ func (c *WsClient) dial() *websocket.Conn {
 
 // Connect to the server and handle messages
 // This function is responsible for establishing a connection to the server
-func (c *WsClient) connect() error {
+func (c *WsClient) connect() {
 	defer c.wg.Done()
 
 Reconnect:
 	conn := c.dial()
 	if conn == nil {
-		return nil
+		return
 	}
 
 	//	Set the read limit for the connection
@@ -104,7 +113,7 @@ Reconnect:
 	if c.done {
 		c.Unlock()
 		conn.Close()
-		return nil
+		return
 	}
 
 	c.conns[conn] = struct{}{}
@@ -130,8 +139,6 @@ Reconnect:
 		time.Sleep(c.conf.ConnectInterval)
 		goto Reconnect
 	}
-
-	return nil
 }
 
 // Close the client and all connections
