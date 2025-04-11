@@ -120,12 +120,17 @@ func (c *TcpConn) Read(b []byte) (int, error) {
 	panic("unimplemented")
 }
 
+// ReadMessage implements network.Conn.
+func (c *TcpConn) ReadMessage() ([]byte, error) {
+	panic("unimplemented")
+}
+
 // RemoteAddr implements network.Conn.
 func (c *TcpConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-// Write implements network.Conn.
-func (c *TcpConn) Write(args ...[]byte) error {
+// WriteMessage implements network.Conn.
+func (c *TcpConn) WriteMessage(args ...[]byte) error {
 	panic("unimplemented")
 }

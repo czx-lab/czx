@@ -124,7 +124,7 @@ func (m *MessageParser) Write(conn *TcpConn, args ...[]byte) error {
 		l += len(args[i])
 	}
 
-	conn.Write(msg)
+	conn.WriteMessage(msg)
 
 	return nil
 }

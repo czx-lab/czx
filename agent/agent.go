@@ -89,7 +89,7 @@ func (a *agent) OnClose() {
 
 func (a *agent) Run() {
 	for {
-		data, err := a.conn.Read()
+		data, err := a.conn.ReadMessage()
 		if err != nil {
 			// Log or handle the error
 			break
@@ -119,7 +119,7 @@ func (a *agent) Write(msg any) error {
 	if err != nil {
 		return err
 	}
-	return a.conn.Write(data...)
+	return a.conn.WriteMessage(data...)
 }
 
 // WriteWithCode implements network.Agent.
@@ -133,7 +133,7 @@ func (a *agent) WriteWithCode(code uint16, msg any) error {
 		return err
 	}
 
-	return a.conn.Write(data...)
+	return a.conn.WriteMessage(data...)
 }
 
 // Close implements Agent.

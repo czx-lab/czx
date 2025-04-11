@@ -123,14 +123,14 @@ func (w *WsConn) RemoteAddr() net.Addr {
 	return w.conn.RemoteAddr()
 }
 
-// Read implements Conn.
-func (w *WsConn) Read() ([]byte, error) {
+// ReadMessage implements Conn.
+func (w *WsConn) ReadMessage() ([]byte, error) {
 	_, b, err := w.conn.ReadMessage()
 	return b, err
 }
 
-// Write implements Conn.
-func (w *WsConn) Write(args ...[]byte) error {
+// WriteMessage implements Conn.
+func (w *WsConn) WriteMessage(args ...[]byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
