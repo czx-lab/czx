@@ -1,6 +1,9 @@
 package event
 
-import "sync"
+import (
+	"slices"
+	"sync"
+)
 
 const (
 	// EvtAgentClose is the event name for when an agent closes.
@@ -53,7 +56,7 @@ func (eb *EventBus) Unsubscribe(event string, ch <-chan any) {
 			continue
 		}
 
-		eb.handlers[event] = append(subscribers[:i], subscribers[i+1:]...)
+		eb.handlers[event] = slices.Delete(subscribers, i, i+1)
 		close(subscriber) // Close the channel to signal that it's no longer needed
 		break
 	}
