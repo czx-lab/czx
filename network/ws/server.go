@@ -37,9 +37,14 @@ type WsServer struct {
 	handler *WsHandler
 }
 
-func NewServer(opt *WsServerConf) *WsServer {
+func NewServer(opt *WsServerConf, agent func(*WsConn) network.Agent) *WsServer {
 	return &WsServer{
 		opt: opt,
+		handler: &WsHandler{
+			opt:   opt,
+			agent: agent,
+			conns: make(WsConns),
+		},
 	}
 }
 
@@ -118,10 +123,6 @@ func (server *WsServer) Start() error {
 	}
 
 	server.ln = ln
-	server.handler = &WsHandler{
-		opt:   server.opt,
-		conns: make(WsConns),
-	}
 
 	httpServer := &http.Server{
 		Addr:           server.opt.Addr,

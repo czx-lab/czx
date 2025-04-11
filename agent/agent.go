@@ -64,7 +64,14 @@ func (g *Gate) Start() {
 	}
 
 	if len(g.option.WsServerConf.Addr) > 0 {
-		g.wsSrv = ws.NewServer(&g.option.WsServerConf)
+		g.wsSrv = ws.NewServer(&g.option.WsServerConf, func(wc *ws.WsConn) network.Agent {
+			a := &agent{conn: wc, gate: g}
+			if a.gate.eventBus != nil {
+				a.gate.eventBus.Publish(event.EvtNewAgent, a)
+			}
+
+			return a
+		})
 		g.wsSrv.Start()
 	}
 

@@ -5,10 +5,11 @@ import "sync"
 const (
 	// EvtAgentClose is the event name for when an agent closes.
 	EvtAgentClose = "AgentClose"
+	//	Event name for when an agent starts.
+	EvtNewAgent = "AgentNew"
 )
 
 type EventBus struct {
-	wg       sync.WaitGroup
 	mu       sync.RWMutex
 	handlers map[string][]chan any
 }
