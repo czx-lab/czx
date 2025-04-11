@@ -27,6 +27,7 @@ type (
 		// Queue for outgoing data
 		writeQueue chan []byte
 		done       bool
+		parse      *MessageParser
 	}
 )
 
@@ -48,6 +49,14 @@ func NewTcpConn(conn net.Conn, conf *TcpConnConf) *TcpConn {
 	tcpconn.init()
 
 	return tcpconn
+}
+
+// WithParse sets the message parser for the TcpConn instance
+// This allows the user to specify how messages should be parsed from the connection
+// It returns the TcpConn instance for method chaining
+func (c *TcpConn) WithParse(parse *MessageParser) *TcpConn {
+	c.parse = parse
+	return c
 }
 
 // Init initializes the TcpConn instance
@@ -117,12 +126,12 @@ func (c *TcpConn) LocalAddr() net.Addr {
 
 // Read implements network.Conn.
 func (c *TcpConn) Read(b []byte) (int, error) {
-	panic("unimplemented")
+	return c.conn.Read(b)
 }
 
 // ReadMessage implements network.Conn.
 func (c *TcpConn) ReadMessage() ([]byte, error) {
-	panic("unimplemented")
+	return c.parse.Read(c)
 }
 
 // RemoteAddr implements network.Conn.
@@ -132,5 +141,5 @@ func (c *TcpConn) RemoteAddr() net.Addr {
 
 // WriteMessage implements network.Conn.
 func (c *TcpConn) WriteMessage(args ...[]byte) error {
-	panic("unimplemented")
+	return c.parse.Write(c, args...)
 }
