@@ -116,7 +116,7 @@ func (c *TcpConn) LocalAddr() net.Addr {
 }
 
 // Read implements network.Conn.
-func (c *TcpConn) Read() ([]byte, error) {
+func (c *TcpConn) Read(b []byte) (int, error) {
 	panic("unimplemented")
 }
 

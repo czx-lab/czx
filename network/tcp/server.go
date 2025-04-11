@@ -10,15 +10,7 @@ var (
 	defaultMaxConn = 1000
 )
 
-const (
-	LenType16 LenType = iota // 2 bytes
-	LenType32                // 4 bytes
-	LenType64                // 8 bytes
-)
-
 type (
-	// Length type for message length field
-	LenType       uint
 	TcpServerConf struct {
 		TcpConnConf
 		MessageParserConf
