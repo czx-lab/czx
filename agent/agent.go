@@ -78,7 +78,7 @@ func (g *Gate) Start() {
 		g.wsSrv.Start()
 	}
 	if len(g.option.TcpServerConf.Addr) > 0 {
-		g.tcpSrv = tcp.NewServer(&g.option.TcpServerConf).WithAgent(func(tc *tcp.TcpConn) network.Agent {
+		g.tcpSrv = tcp.NewServer(&g.option.TcpServerConf, func(tc *tcp.TcpConn) network.Agent {
 			a := &agent{conn: tc, gate: g}
 			if a.gate.eventBus != nil {
 				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
@@ -86,6 +86,7 @@ func (g *Gate) Start() {
 
 			return a
 		})
+		g.tcpSrv.Start()
 	}
 
 	// Handle graceful shutdown on Ctrl+C

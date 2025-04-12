@@ -34,21 +34,15 @@ type (
 	}
 )
 
-func NewServer(conf *TcpServerConf) *TcpServer {
+func NewServer(conf *TcpServerConf, agent func(*TcpConn) network.Agent) *TcpServer {
 	defaultConf(conf)
 
 	return &TcpServer{
 		conf:  conf,
 		conns: make(Conns),
+		agent: agent,
 		parse: NewParse(&conf.MessageParserConf),
 	}
-}
-
-// WithParse sets the message parser for the server
-// The parser is responsible for parsing messages from the connection
-func (srv *TcpServer) WithAgent(agent func(*TcpConn) network.Agent) *TcpServer {
-	srv.agent = agent
-	return srv
 }
 
 // Start starts the TCP server and begins accepting connections
