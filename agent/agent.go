@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"czx/event"
+	"czx/eventbus"
 	"czx/network"
 	"czx/network/ws"
 	"errors"
@@ -23,7 +23,7 @@ type (
 		option    GateConf
 		processor network.Processor
 		wsSrv     *ws.WsServer
-		eventBus  *event.EventBus
+		eventBus  *eventbus.EventBus
 	}
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
@@ -51,7 +51,7 @@ func (g *Gate) WithProcessor(processor network.Processor) *Gate {
 
 // WithEventBus sets the event bus for the Gate instance.
 // The event bus is used for publishing and subscribing to events.
-func (g *Gate) WithEventBus(bus *event.EventBus) *Gate {
+func (g *Gate) WithEventBus(bus *eventbus.EventBus) *Gate {
 	g.eventBus = bus
 	return g
 }
@@ -60,14 +60,14 @@ func (g *Gate) Start() {
 	// Default event bus
 	// If no event bus is provided, use the default event bus.
 	if g.eventBus == nil {
-		g.eventBus = event.DefaultBus
+		g.eventBus = eventbus.DefaultBus
 	}
 
 	if len(g.option.WsServerConf.Addr) > 0 {
 		g.wsSrv = ws.NewServer(&g.option.WsServerConf, func(wc *ws.WsConn) network.Agent {
 			a := &agent{conn: wc, gate: g}
 			if a.gate.eventBus != nil {
-				a.gate.eventBus.Publish(event.EvtNewAgent, a)
+				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
 			}
 
 			return a
@@ -91,7 +91,7 @@ func (a *agent) OnClose() {
 		return
 	}
 
-	a.gate.eventBus.Publish(event.EvtAgentClose, a)
+	a.gate.eventBus.Publish(eventbus.EvtAgentClose, a)
 }
 
 func (a *agent) Run() {
