@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"czx/network"
 	"net"
 	"sync"
 	"time"
@@ -27,6 +28,9 @@ type (
 		// Map of connections
 		conns Conns
 		ln    net.Listener
+
+		agent func(*TcpConn) network.Agent
+		parse *MessageParser
 	}
 )
 
@@ -36,7 +40,15 @@ func NewServer(conf *TcpServerConf) *TcpServer {
 	return &TcpServer{
 		conf:  conf,
 		conns: make(Conns),
+		parse: NewParse(&conf.MessageParserConf),
 	}
+}
+
+// WithParse sets the message parser for the server
+// The parser is responsible for parsing messages from the connection
+func (srv *TcpServer) WithAgent(agent func(*TcpConn) network.Agent) *TcpServer {
+	srv.agent = agent
+	return srv
 }
 
 // Start starts the TCP server and begins accepting connections
@@ -94,6 +106,21 @@ func (srv *TcpServer) run() {
 		srv.conns[conn] = struct{}{}
 		srv.Unlock()
 		srv.connWait.Add(1)
+
+		tcpconn := NewTcpConn(conn, &srv.conf.TcpConnConf).WithParse(srv.parse)
+		agent := srv.agent(tcpconn)
+
+		go func() {
+			agent.Run()
+
+			tcpconn.Close()
+			srv.Lock()
+			delete(srv.conns, conn)
+			srv.Unlock()
+			agent.OnClose()
+
+			srv.connWait.Done()
+		}()
 	}
 }
 
