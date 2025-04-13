@@ -28,7 +28,7 @@ type Room struct {
 
 	// players is used to keep track of the players in the room
 	// and to prevent multiple calls to Join()
-	players map[uint64]struct{}
+	players map[string]struct{}
 
 	// rpcClient is used to send messages to the room
 	// and receive messages from the room
@@ -40,7 +40,7 @@ func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomCo
 		opt:       opt,
 		loop:      NewLoop(msgProcessor, opt),
 		processor: processor,
-		players:   make(map[uint64]struct{}),
+		players:   make(map[string]struct{}),
 	}
 
 	// Set the stop callback
@@ -66,7 +66,7 @@ func (r *Room) WriteMessage(msg Message) error {
 
 // Join is used to add a player to the room
 // and to prevent multiple calls to Join()
-func (r *Room) Join(playerID uint64) error {
+func (r *Room) Join(playerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -90,7 +90,7 @@ func (r *Room) Join(playerID uint64) error {
 
 // Leave is used to remove a player from the room
 // and to prevent multiple calls to Leave()
-func (r *Room) Leave(playerID uint64) error {
+func (r *Room) Leave(playerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

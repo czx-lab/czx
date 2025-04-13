@@ -2,9 +2,9 @@ package room
 
 type RoomProcessor interface {
 	// Join is called when a player joins the room
-	Join(playerID uint64) error
+	Join(playerID string) error
 	// Leave is called when a player leaves the room
-	Leave(playerID uint64) error
+	Leave(playerID string) error
 }
 
 type MessageProcessor interface {

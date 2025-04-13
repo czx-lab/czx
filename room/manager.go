@@ -23,8 +23,8 @@ func NewRoomManager() *RoomManager {
 	}
 }
 
-// AddRoom adds a new room to the manager.
-func (rm *RoomManager) AddRoom(room *Room) error {
+// Add adds a new room to the manager.
+func (rm *RoomManager) Add(room *Room) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
@@ -46,8 +46,8 @@ func (rm *RoomManager) AddRoom(room *Room) error {
 	return nil
 }
 
-// GetRoom retrieves a room by its ID.
-func (rm *RoomManager) GetRoom(roomID uint64) (*Room, error) {
+// Get retrieves a room by its ID.
+func (rm *RoomManager) Get(roomID uint64) (*Room, error) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
@@ -59,8 +59,8 @@ func (rm *RoomManager) GetRoom(roomID uint64) (*Room, error) {
 	return room, nil
 }
 
-// RoomNum returns the number of rooms managed by the RoomManager.
-func (rm *RoomManager) RoomNum() int {
+// Num returns the number of rooms managed by the RoomManager.
+func (rm *RoomManager) Num() int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 

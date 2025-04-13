@@ -31,13 +31,13 @@ var _ MessageProcessor = (*msgprocessor)(nil)
 type roomprocessor struct{}
 
 // Join implements RoomProcessor.
-func (r *roomprocessor) Join(playerID uint64) error {
+func (r *roomprocessor) Join(playerID string) error {
 	fmt.Println("roomprocessor Join", playerID)
 	return nil
 }
 
 // Leave implements RoomProcessor.
-func (r *roomprocessor) Leave(playerID uint64) error {
+func (r *roomprocessor) Leave(playerID string) error {
 	fmt.Println("roomprocessor Leave", playerID)
 	return nil
 }
@@ -74,11 +74,11 @@ func TestRoom(t *testing.T) {
 				Msg:      []byte{'m', 'e', '2'},
 			})
 
-			room.Join(10)
-			room.Join(11)
-			room.Join(12)
+			room.Join("10")
+			room.Join("11")
+			room.Join("12")
 			time.AfterFunc(time.Second, func() {
-				room.Leave(10)
+				room.Leave("10")
 			})
 		})
 		for {
@@ -101,7 +101,7 @@ func TestRoomManager(t *testing.T) {
 		)
 		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
 
-		if err := rm.AddRoom(room); err != nil {
+		if err := rm.Add(room); err != nil {
 			t.Errorf("add room err %v", err)
 		}
 
@@ -112,11 +112,11 @@ func TestRoomManager(t *testing.T) {
 			Msg:      []byte{'m', 'e', '2'},
 		})
 
-		room.Join(10)
-		room.Join(11)
-		room.Join(12)
+		room.Join("10")
+		room.Join("11")
+		room.Join("12")
 
-		room.Leave(10)
+		room.Leave("10")
 
 		rm.Stop()
 
