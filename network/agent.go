@@ -25,3 +25,8 @@ type Agent interface {
 	// GetUserData retrieves user data for the connection.
 	GetUserData() any
 }
+
+type GnetAgent interface {
+	// Process incoming data
+	React([]byte)
+}

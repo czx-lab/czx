@@ -38,6 +38,7 @@ type (
 )
 
 var _ network.Agent = (*agent)(nil)
+var _ network.GnetAgent = (*agent)(nil)
 
 func NewGate(opt GateConf) *Gate {
 	return &Gate{
@@ -130,6 +131,22 @@ func (a *agent) Run() {
 				break
 			}
 		}
+	}
+}
+
+// React implements network.GnetAgent.
+func (a *agent) React(data []byte) {
+	if a.gate.processor == nil {
+		a.conn.Close()
+		return
+	}
+
+	msg, err := a.gate.processor.Unmarshal(data)
+	if err != nil {
+		return
+	}
+	if err = a.gate.processor.Process(msg); err != nil {
+		return
 	}
 }
 
