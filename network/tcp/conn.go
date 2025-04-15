@@ -2,8 +2,11 @@ package tcp
 
 import (
 	"czx/network"
+	"czx/xlog"
 	"net"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -68,6 +71,7 @@ func (c *TcpConn) init() {
 			}
 
 			if _, err := c.conn.Write(b); err != nil {
+				xlog.Write().Error("tcp conn write error", zap.Error(err))
 				break
 			}
 		}

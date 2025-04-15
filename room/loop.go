@@ -1,8 +1,11 @@
 package room
 
 import (
+	"czx/xlog"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type Loop struct {
@@ -47,16 +50,21 @@ LOOP:
 			select {
 			case msg := <-l.msgs:
 				if err := l.processor.Process(msg); err != nil {
+					xlog.Write().Error("Error processing message:", zap.Error(err))
+
 					l.Stop()
 					break
 				}
 
 				// Update the last activity time
-				// This is to ensure that the heartbeat logic works correctly
 				lastActivity = time.Now()
+			default:
+				// No message in the channel, skip processing
 			}
 		case <-heartbeatTicker.C:
 			if err := l.processor.HandleIdle(); err != nil {
+				xlog.Write().Error("Error handling idle:", zap.Error(err))
+
 				l.Stop()
 				break
 			}

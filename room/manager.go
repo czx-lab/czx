@@ -1,8 +1,11 @@
 package room
 
 import (
+	"czx/xlog"
 	"errors"
 	"sync"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -39,7 +42,7 @@ func (rm *RoomManager) Add(room *Room) error {
 		defer rm.wg.Done()
 
 		if err := room.Start(); err != nil {
-			println("Error starting room:", err.Error())
+			xlog.Write().Error("Error starting room:", zap.Error(err))
 		}
 	}()
 

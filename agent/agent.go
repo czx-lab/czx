@@ -6,11 +6,14 @@ import (
 	"czx/network"
 	xtcp "czx/network/tcp"
 	"czx/network/ws"
+	"czx/xlog"
 	"errors"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"go.uber.org/zap"
 )
 
 var (
@@ -133,18 +136,18 @@ func (a *agent) Run() {
 	for {
 		data, err := a.conn.ReadMessage()
 		if err != nil {
-			// Log or handle the error
+			xlog.Write().Error("network read message error", zap.Error(err))
 			break
 		}
 
 		if a.gate.processor != nil {
 			msg, err := a.gate.processor.Unmarshal(data)
 			if err != nil {
-				// Log or handle the error
+				xlog.Write().Error("network processor message decoding error", zap.Error(err))
 				break
 			}
 			if err = a.gate.processor.Process(msg); err != nil {
-				// Log or handle the error
+				xlog.Write().Error("network message processor error", zap.Error(err))
 				break
 			}
 		}
@@ -160,9 +163,11 @@ func (a *agent) React(data []byte) {
 
 	msg, err := a.gate.processor.Unmarshal(data)
 	if err != nil {
+		xlog.Write().Error("network processor message decoding error", zap.Error(err))
 		return
 	}
 	if err = a.gate.processor.Process(msg); err != nil {
+		xlog.Write().Error("network message processor error", zap.Error(err))
 		return
 	}
 }

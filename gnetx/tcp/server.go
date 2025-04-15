@@ -4,10 +4,12 @@ import (
 	"context"
 	"czx/network"
 	xtcp "czx/network/tcp"
+	"czx/xlog"
 	"strings"
 	"time"
 
 	"github.com/panjf2000/gnet/v2"
+	"go.uber.org/zap"
 )
 
 var (
@@ -116,6 +118,7 @@ func (es *GnetTcpServer) OnBoot(eng gnet.Engine) gnet.Action {
 func (es *GnetTcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 	buf, err := c.Next(-1)
 	if err != nil {
+		xlog.Write().Error("gnet tcp server read error: %v", zap.Error(err))
 		return gnet.Close
 	}
 

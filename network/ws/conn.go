@@ -2,11 +2,13 @@ package ws
 
 import (
 	"czx/network"
+	"czx/xlog"
 	"errors"
 	"net"
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 var (
@@ -60,6 +62,7 @@ func NewConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
 			}
 
 			if err := wsConn.conn.WriteMessage(websocket.BinaryMessage, v); err != nil {
+				xlog.Write().Error("ws conn write error", zap.Error(err))
 				break
 			}
 		}
