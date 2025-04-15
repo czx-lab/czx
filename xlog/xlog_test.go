@@ -9,7 +9,7 @@ func TestLog(t *testing.T) {
 		Write().Error("test log error.")
 		Write().Debug("test log debug.")
 
-		Init(&XLogConf{
+		Load(&XLogConf{
 			ServiceName: "test",
 			Mode:        FileMode,
 			Encoding:    EncodingJson,

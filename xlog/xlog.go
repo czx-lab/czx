@@ -68,7 +68,7 @@ func init() {
 	}
 }
 
-func Init(conf *XLogConf) {
+func Load(conf *XLogConf) {
 	mutex.Lock()
 	defer mutex.Unlock()
 

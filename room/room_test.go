@@ -22,7 +22,7 @@ func (m *msgprocessor) HandleIdle() error {
 
 // Process implements MessageProcessor.
 func (m *msgprocessor) Process(msg Message) error {
-	fmt.Println("msgprocessor Process", msg.PlayerID, string(msg.Msg))
+	fmt.Printf("msgprocessor Process playerId = %v, msg = %+v", msg.PlayerID, string(msg.Msg))
 	return nil
 }
 
@@ -59,31 +59,38 @@ func TestRoom(t *testing.T) {
 			t.Errorf("expected room id 1, got %d", room.ID())
 		}
 
-		if err := room.Start(); err != nil {
-			t.Errorf("room start err %v", err)
-		}
+		go func() {
+			if err := room.Start(); err != nil {
+				t.Errorf("room start err %v", err)
+			}
+		}()
 
-		room.WriteMessage(Message{
-			PlayerID: 1,
-			Msg:      []byte{'m', 'e'},
+		time.AfterFunc(2*time.Second, func() {
+			if err := room.WriteMessage(Message{
+				PlayerID: 1,
+				Msg:      []byte{'m', 'e'},
+			}); err != nil {
+				t.Error("write message err", err)
+			}
 		})
 
 		time.AfterFunc(10*time.Second, func() {
 			room.WriteMessage(Message{
-				PlayerID: 2,
-				Msg:      []byte{'m', 'e', '2'},
+				PlayerID:  2,
+				Msg:       []byte{'m', 'e', '2'},
+				Timestamp: time.Now(),
 			})
 
 			room.Join("10")
 			room.Join("11")
 			room.Join("12")
 			time.AfterFunc(time.Second, func() {
-				room.Leave("10")
+				if err := room.Leave("10"); err != nil {
+					t.Errorf("leave player 10 err %v", err)
+				}
 			})
 		})
-		for {
-
-		}
+		<-(chan any)(nil)
 	})
 }
 

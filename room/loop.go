@@ -38,43 +38,38 @@ func (l *Loop) loop() error {
 	ticker := time.NewTicker(l.opt.frequency)
 	defer ticker.Stop()
 
-	heartbeatTicker := time.NewTicker(l.opt.heartbeatFrequency) // Separate ticker for heartbeat
-	defer heartbeatTicker.Stop()
-
-	lastActivity := time.Now() // Track the last activity time
+	lastActivity := time.Now()  // Track the last activity time
+	lastHeartbeat := time.Now() // Track the last heartbeat time
 
 LOOP:
 	for {
 		select {
 		case <-ticker.C:
+			// Process messages
 			select {
 			case msg := <-l.msgs:
 				if err := l.processor.Process(msg); err != nil {
 					xlog.Write().Error("Error processing message:", zap.Error(err))
-
 					l.Stop()
 					break
 				}
-
-				// Update the last activity time
-				lastActivity = time.Now()
+				lastActivity = time.Now() // Update the last activity time
 			default:
 				// No message in the channel, skip processing
 			}
-		case <-heartbeatTicker.C:
-			if err := l.processor.HandleIdle(); err != nil {
-				xlog.Write().Error("Error handling idle:", zap.Error(err))
 
-				l.Stop()
-				break
+			// Handle heartbeat if the interval has passed
+			if time.Since(lastHeartbeat) >= l.opt.heartbeatFrequency {
+				if err := l.processor.HandleIdle(); err != nil {
+					xlog.Write().Error("Error handling idle:", zap.Error(err))
+					l.Stop()
+					break
+				}
+				lastHeartbeat = time.Now() // Update the last heartbeat time
 			}
 
-			// Unified idle handling and timeout logic
-			if l.opt.timeout == 0 {
-				continue // No timeout set, skip this check
-			}
-
-			if time.Since(lastActivity) > l.opt.timeout {
+			// Check for timeout
+			if l.opt.timeout > 0 && time.Since(lastActivity) > l.opt.timeout {
 				l.Stop()
 			}
 		case <-l.quit:
