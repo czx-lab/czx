@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"czx/network"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -88,7 +89,7 @@ func (m *MessageParser) Read(conn *TcpConn) ([]byte, error) {
 }
 
 // Write Message
-func (m *MessageParser) Write(conn *TcpConn, args ...[]byte) error {
+func (m *MessageParser) Write(conn network.Conn, args ...[]byte) error {
 	var msgLen uint32
 	for i := range args {
 		msgLen += uint32(len(args[i]))

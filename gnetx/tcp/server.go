@@ -1,6 +1,7 @@
-package gnetx
+package tcp
 
 import (
+	"context"
 	"czx/network"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ var (
 
 type (
 	GnetTcpServerConf struct {
+		GnetTcpConnConf
 		Addr      string
 		KeepAlive uint64
 		Multicore bool
@@ -60,7 +62,7 @@ func (g *GnetTcpServer) Start() {
 }
 
 func (g *GnetTcpServer) Stop() {
-	g.eng.Stop(nil)
+	g.eng.Stop(context.Background())
 }
 
 // OnClose implements gnet.EventHandler.
@@ -76,7 +78,7 @@ func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 
 // OnOpen implements gnet.EventHandler.
 func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	conn := NewGnetConn(c)
+	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf)
 	agent := es.agent(conn)
 	c.SetContext(agent)
 
