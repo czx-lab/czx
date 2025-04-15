@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	defaultKeepAlive uint64 = 2 * 60 // 2 minutes
+	defaultKeepAlive  uint64 = 2 * 60 // 2 minutes
+	defaultMsgMinSize uint32 = 1
 )
 
 type (
@@ -38,9 +39,7 @@ type (
 var _ gnet.EventHandler = (*GnetTcpServer)(nil)
 
 func NewGNetTcpServer(conf *GnetTcpServerConf, agent func(network.Conn) network.Agent) *GnetTcpServer {
-	if conf.KeepAlive == 0 {
-		conf.KeepAlive = defaultKeepAlive
-	}
+	defaultConf(conf)
 
 	return &GnetTcpServer{
 		conf:  conf,
@@ -130,4 +129,16 @@ func (es *GnetTcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 	}
 
 	return gnet.None
+}
+
+func defaultConf(conf *GnetTcpServerConf) {
+	if conf.PendingWrite <= 0 {
+		conf.PendingWrite = defaultPendingWrite
+	}
+	if conf.MsgMinSize <= 0 {
+		conf.MsgMinSize = defaultMsgMinSize
+	}
+	if conf.KeepAlive == 0 {
+		conf.KeepAlive = defaultKeepAlive
+	}
 }
