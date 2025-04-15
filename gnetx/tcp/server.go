@@ -3,6 +3,7 @@ package tcp
 import (
 	"context"
 	"czx/network"
+	xtcp "czx/network/tcp"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ var (
 type (
 	GnetTcpServerConf struct {
 		GnetTcpConnConf
+		xtcp.MessageParserConf
 		Addr      string
 		KeepAlive uint64
 		Multicore bool
@@ -27,6 +29,7 @@ type (
 		agent  func(network.Conn) network.Agent
 		delay  time.Duration
 		tickFn func()
+		parse  *xtcp.MessageParser
 	}
 )
 
@@ -40,6 +43,7 @@ func NewGNetTcpServer(conf *GnetTcpServerConf, agent func(network.Conn) network.
 	return &GnetTcpServer{
 		conf:  conf,
 		agent: agent,
+		parse: xtcp.NewParse(&conf.MessageParserConf),
 	}
 }
 
@@ -78,7 +82,7 @@ func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 
 // OnOpen implements gnet.EventHandler.
 func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
-	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf)
+	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf).WithParse(es.parse)
 	agent := es.agent(conn)
 	c.SetContext(agent)
 

@@ -2,8 +2,9 @@ package agent
 
 import (
 	"czx/eventbus"
+	gnetcp "czx/gnetx/tcp"
 	"czx/network"
-	"czx/network/tcp"
+	xtcp "czx/network/tcp"
 	"czx/network/ws"
 	"errors"
 	"net"
@@ -19,13 +20,15 @@ var (
 type (
 	GateConf struct {
 		ws.WsServerConf
-		tcp.TcpServerConf
+		xtcp.TcpServerConf
+		gnetcp.GnetTcpServerConf
 	}
 	Gate struct {
 		option    GateConf
 		processor network.Processor
 		wsSrv     *ws.WsServer
-		tcpSrv    *tcp.TcpServer
+		tcpSrv    *xtcp.TcpServer
+		gnetcpSrv *gnetcp.GnetTcpServer
 		eventBus  *eventbus.EventBus
 	}
 	// agent implements network.Agent interface
@@ -79,7 +82,7 @@ func (g *Gate) Start() {
 		g.wsSrv.Start()
 	}
 	if len(g.option.TcpServerConf.Addr) > 0 {
-		g.tcpSrv = tcp.NewServer(&g.option.TcpServerConf, func(tc *tcp.TcpConn) network.Agent {
+		g.tcpSrv = xtcp.NewServer(&g.option.TcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
 			a := &agent{conn: tc, gate: g}
 			if a.gate.eventBus != nil {
 				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
@@ -88,6 +91,17 @@ func (g *Gate) Start() {
 			return a
 		})
 		g.tcpSrv.Start()
+	}
+	if len(g.option.GnetTcpServerConf.Addr) > 0 {
+		g.gnetcpSrv = gnetcp.NewGNetTcpServer(&g.option.GnetTcpServerConf, func(c network.Conn) network.Agent {
+			a := &agent{conn: c, gate: g}
+			if a.gate.eventBus != nil {
+				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+			}
+
+			return a
+		})
+		g.gnetcpSrv.Start()
 	}
 
 	// Handle graceful shutdown on Ctrl+C
@@ -100,6 +114,9 @@ func (g *Gate) Start() {
 	}
 	if g.tcpSrv != nil {
 		g.tcpSrv.Stop()
+	}
+	if g.gnetcpSrv != nil {
+		g.gnetcpSrv.Stop()
 	}
 }
 
