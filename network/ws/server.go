@@ -89,6 +89,10 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	})
 
 	agent := handler.agent(wsconn)
+	ip, port := network.GetClientIP(r)
+
+	// Set the IP and port in the agent
+	agent.OnPreConn(network.PreHandlerMessage{Req: r, IP: *ip, Port: *port})
 	agent.Run()
 
 	wsconn.Close()

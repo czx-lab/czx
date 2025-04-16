@@ -85,6 +85,11 @@ func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf).WithParse(es.parse)
 	agent := es.agent(conn)
+
+	ip, port, _ := network.GetClientIPFromProxyProtocol(c)
+	// Set the IP and port in the agent
+	agent.OnPreConn(network.PreHandlerMessage{IP: *ip, Port: *port})
+
 	c.SetContext(agent)
 
 	return nil, gnet.None

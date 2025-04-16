@@ -33,6 +33,7 @@ type (
 		tcpSrv    *xtcp.TcpServer
 		gnetcpSrv *gnetcp.GnetTcpServer
 		eventBus  *eventbus.EventBus
+		preConn   network.PreConnHandler
 	}
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
@@ -56,6 +57,13 @@ func NewGate(opt GateConf) *Gate {
 // The processor is responsible for marshaling and unmarshaling messages.
 func (g *Gate) WithProcessor(processor network.Processor) *Gate {
 	g.processor = processor
+	return g
+}
+
+// WithPreConn sets the pre-connection function for the Gate instance.
+// The pre-connection function is called before a new connection is established.
+func (g *Gate) WithPreConn(fn network.PreConnHandler) *Gate {
+	g.preConn = fn
 	return g
 }
 
@@ -152,6 +160,15 @@ func (a *agent) Run() {
 			}
 		}
 	}
+}
+
+// OnPreConn implements network.Agent.
+func (a *agent) OnPreConn(data network.PreHandlerMessage) {
+	if a.gate.preConn == nil {
+		return
+	}
+
+	a.gate.preConn(a, data)
 }
 
 // React implements network.GnetAgent.

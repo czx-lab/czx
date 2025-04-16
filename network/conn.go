@@ -1,23 +1,42 @@
 package network
 
-import "net"
+import (
+	"net"
+	"net/http"
+)
 
-type Conn interface {
-	// Read reads data from the connection and returns it as a byte slice.
-	ReadMessage() ([]byte, error)
-	// Write sends a message to the connection.
-	WriteMessage(args ...[]byte) error
-	// LocalAddr returns the local address of the connection.
-	LocalAddr() net.Addr
-	// RemoteAddr returns the remote address of the connection.
-	RemoteAddr() net.Addr
-	// Close closes the connection.
-	Close()
-	// Destroy closes the connection and releases resources.
-	Destroy()
-}
+type (
+	// Conn is an interface for handling network connections and messages.
+	// It provides methods for reading and writing messages, managing connection state,
+	Conn interface {
+		// Read reads data from the connection and returns it as a byte slice.
+		ReadMessage() ([]byte, error)
+		// Write sends a message to the connection.
+		WriteMessage(args ...[]byte) error
+		// LocalAddr returns the local address of the connection.
+		LocalAddr() net.Addr
+		// RemoteAddr returns the remote address of the connection.
+		RemoteAddr() net.Addr
+		// Close closes the connection.
+		Close()
+		// Destroy closes the connection and releases resources.
+		Destroy()
+	}
 
-type Reader interface {
-	// Read reads data from the connection and returns it as an int and an error.
-	Read([]byte) (int, error)
-}
+	// Reader is an interface for reading data from a connection.
+	// It provides a method to read data into a byte slice.
+	Reader interface {
+		// Read reads data from the connection and returns it as an int and an error.
+		Read([]byte) (int, error)
+	}
+
+	// PreHandlerMessage is a struct that contains information about an incoming connection and its associated request.
+	PreHandlerMessage struct {
+		IP   string
+		Port string
+		Req  *http.Request
+	}
+
+	// PreConnHandler is a function type that handles incoming connections and messages. It takes an Agent and a PreHandlerMessage as arguments and returns an error.
+	PreConnHandler func(Agent, PreHandlerMessage)
+)

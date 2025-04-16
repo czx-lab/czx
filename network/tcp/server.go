@@ -104,6 +104,10 @@ func (srv *TcpServer) run() {
 		tcpconn := NewTcpConn(conn, &srv.conf.TcpConnConf).WithParse(srv.parse)
 		agent := srv.agent(tcpconn)
 
+		ip, port, _ := network.GetClientIPFromProxyProtocol(conn)
+		// Set the IP and port in the agent
+		agent.OnPreConn(network.PreHandlerMessage{IP: *ip, Port: *port})
+
 		go func() {
 			agent.Run()
 
