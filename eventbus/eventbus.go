@@ -29,20 +29,58 @@ func NewEventBus() *EventBus {
 	}
 }
 
-// Subscribe creates a new channel for the given event and returns it.
-// The channel is buffered with a size of 1.
-func (eb *EventBus) Subscribe(event string) <-chan any {
+// SubscribeOnChannel creates a new channel for the given event and returns it.
+// The channel is buffered with a size of 1. It will not unsubscribe itself.
+func (eb *EventBus) SubscribeOnChannel(event string) chan any {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
 	ch := make(chan any, 1)
 	eb.handlers[event] = append(eb.handlers[event], ch)
+
 	return ch
 }
 
-// Unsubscribe removes the channel for the given event.
-// If the event does not exist, it does nothing.
-func (eb *EventBus) Unsubscribe(event string, ch <-chan any) {
+// Subscribe creates a new channel for the given event and returns it.
+// The channel is buffered with a size of 1. It will not unsubscribe itself.
+func (eb *EventBus) Subscribe(event string, callback func(message any)) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	ch := make(chan any, 1)
+	eb.handlers[event] = append(eb.handlers[event], ch)
+
+	go func() {
+		for msg := range ch {
+			if callback == nil {
+				continue
+			}
+			callback(msg) // Call the callback function with the received message
+		}
+	}()
+}
+
+// Unsubscriben removes the given event from the handler mapping.
+// It also closes the channel to indicate that it is no longer needed.
+func (eb *EventBus) Unsubscriben(event string) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	subscribers, ok := eb.handlers[event]
+	if !ok {
+		return
+	}
+
+	for _, subscriber := range subscribers {
+		close(subscriber)
+	}
+
+	delete(eb.handlers, event)
+}
+
+// UnsubscribenChannel removes the specified channel for the given event from the handlers map.
+// It also closes the channel to signal that it's no longer needed.
+func (eb *EventBus) UnsubscribenChannel(event string, ch chan any) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
@@ -52,13 +90,11 @@ func (eb *EventBus) Unsubscribe(event string, ch <-chan any) {
 	}
 
 	for i, subscriber := range subscribers {
-		if subscriber != ch {
-			continue
+		if subscriber == ch {
+			eb.handlers[event] = slices.Delete(subscribers, i, i+1)
+			close(subscriber)
+			break
 		}
-
-		eb.handlers[event] = slices.Delete(subscribers, i, i+1)
-		close(subscriber) // Close the channel to signal that it's no longer needed
-		break
 	}
 
 	if len(eb.handlers[event]) == 0 {
@@ -66,31 +102,40 @@ func (eb *EventBus) Unsubscribe(event string, ch <-chan any) {
 	}
 }
 
-// SubscribeOnce creates a new channel for the given event and returns it.
-// The channel is buffered with a size of 1. It will unsubscribe itself after receiving the first message.
-func (eb *EventBus) SubscribeOnce(event string) <-chan any {
-	ch := eb.Subscribe(event)
+// SubscribeOnce creates a new subscription for the given event.
+// It will automatically unsubscribe itself after receiving the first message.
+func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
+	ch := make(chan any, 1)
+	eb.mu.Lock()
+	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.mu.Unlock()
+
 	go func() {
-		for range ch {
-			eb.Unsubscribe(event, ch)
-			break
+		for msg := range ch {
+			if callback != nil {
+				callback(msg)
+			}
+			eb.UnsubscribenChannel(event, ch)
+			// Removed the unconditional break to allow the loop to process all messages.
 		}
 	}()
-	return ch
 }
 
-// SubscribeWithFilter creates a new channel for the given event and returns it.
-// The channel is buffered with a size of 1. It will only receive messages that pass the filter function.
-func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool) <-chan any {
+// SubscribeWithFilter creates a new subscription for the given event with a filter function.
+// It will only pass messages that satisfy the filter condition to the callback.
+func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool, callback func(message any)) {
 	ch := make(chan any, 1)
+	eb.mu.Lock()
+	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.mu.Unlock()
+
 	go func() {
-		for msg := range eb.Subscribe(event) {
-			if filter(msg) {
-				ch <- msg
+		for msg := range ch {
+			if filter(msg) && callback != nil {
+				callback(msg)
 			}
 		}
 	}()
-	return ch
 }
 
 // Publish sends the data to all subscribers of the given event.

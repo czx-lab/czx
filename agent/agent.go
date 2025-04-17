@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
@@ -34,6 +35,8 @@ type (
 		gnetcpSrv *gnetcp.GnetTcpServer
 		eventBus  *eventbus.EventBus
 		preConn   network.PreConnHandler
+
+		flag chan struct{}
 	}
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
@@ -51,6 +54,11 @@ func NewGate(opt GateConf) *Gate {
 	return &Gate{
 		option: opt,
 	}
+}
+
+func (g *Gate) WithFlag(flag chan struct{}) *Gate {
+	g.flag = flag
+	return g
 }
 
 // WithProcessor sets the processor for the Gate instance.
@@ -116,10 +124,14 @@ func (g *Gate) Start() {
 	}
 
 	// Handle graceful shutdown on Ctrl+C
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	if g.flag != nil {
+		<-g.flag
+	} else {
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+		<-sig
+	}
 
-	<-sig
 	if g.wsSrv != nil {
 		g.wsSrv.Stop()
 	}
@@ -144,6 +156,21 @@ func (a *agent) Run() {
 	for {
 		data, err := a.conn.ReadMessage()
 		if err != nil {
+			if network.IsClosedConnError(err) {
+				xlog.Write().Debug("network closed connection error", zap.Error(err))
+				break
+			}
+
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				xlog.Write().Debug("network closed connection error", zap.Error(err))
+				break
+			}
+
+			if errors.Is(err, net.ErrClosed) {
+				xlog.Write().Debug("network closed connection error", zap.Error(err))
+				break
+			}
+
 			xlog.Write().Error("network read message error", zap.Error(err))
 			break
 		}

@@ -109,3 +109,19 @@ func GetClientIP(r *http.Request) (ip, port *string) {
 
 	return
 }
+
+// IsClosedConnError checks if the error is a closed network connection error.
+// It checks if the error is of type net.OpError and contains the specific error message.
+func IsClosedConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		if strings.Contains(err.Error(), "use of closed network connection") {
+			return true
+		}
+	}
+	return false
+}
