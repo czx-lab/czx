@@ -19,10 +19,13 @@ func TestEventbus(t *testing.T) {
 		go func() {
 			for {
 				select {
-				case msg := <-ch_1:
-					t.Logf("Received message on channel 1: %v", msg)
-				case msg := <-ch_2:
-					t.Logf("Received message on channel 2: %v", msg)
+				case msg, ok := <-ch_1:
+					t.Logf("Received message on channel 1: %v closed: %v", msg, ok)
+					DefaultBus.UnsubscribenChannel("test", ch_1)
+
+					DefaultBus.Publish("test", "test message 2")
+				case msg, ok := <-ch_2:
+					t.Logf("Received message on channel 2: %v closed: %v", msg, ok)
 				}
 			}
 		}()

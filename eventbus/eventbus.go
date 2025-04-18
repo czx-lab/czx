@@ -31,7 +31,7 @@ func NewEventBus() *EventBus {
 
 // SubscribeOnChannel creates a new channel for the given event and returns it.
 // The channel is buffered with a size of 1. It will not unsubscribe itself.
-func (eb *EventBus) SubscribeOnChannel(event string) chan any {
+func (eb *EventBus) SubscribeOnChannel(event string) <-chan any {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
@@ -80,7 +80,7 @@ func (eb *EventBus) Unsubscriben(event string) {
 
 // UnsubscribenChannel removes the specified channel for the given event from the handlers map.
 // It also closes the channel to signal that it's no longer needed.
-func (eb *EventBus) UnsubscribenChannel(event string, ch chan any) {
+func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
