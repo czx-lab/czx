@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"reflect"
 
@@ -136,7 +135,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 func (p *Processor) Register(id uint16, msg proto.Message) error {
 	msgtype := reflect.TypeOf(msg)
 	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
-		log.Fatal("protobuf: message must be a pointer")
+		return errors.New("protobuf: message must be a pointer")
 	}
 
 	_, ok := p.ids[msgtype]
@@ -156,7 +155,7 @@ func (p *Processor) Register(id uint16, msg proto.Message) error {
 }
 
 // RegisterHandler implements network.Processor.
-func (p *Processor) RegisterHandler(id uint16, msg proto.Message, handler network.Handler) error {
+func (p *Processor) RegisterHandler(msg proto.Message, handler network.Handler) error {
 	msgtype := reflect.TypeOf(msg)
 	id, ok := p.ids[msgtype]
 	if !ok {

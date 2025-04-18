@@ -28,6 +28,6 @@ type (
 		// Register registers a message type with an ID.
 		Register(id uint16, msg proto.Message) error
 		// RegisterHandler registers a handler for a message type.
-		RegisterHandler(id uint16, msg proto.Message, handler Handler) error
+		RegisterHandler(msg proto.Message, handler Handler) error
 	}
 )
