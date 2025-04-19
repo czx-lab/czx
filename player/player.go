@@ -68,7 +68,21 @@ func (p *Player) Heartbeat() {
 
 // Close the player connection and clean up resources
 func (p *Player) Close() {
-	p.agent.Close()
+	if p.agent != nil {
+		p.agent.Close()
+	}
+
 	// Unregister from heartbeat manager
 	GlobalHeartbeat.Unregister(p)
+}
+
+// Destroy cleans up the player resources and unregisters from the heartbeat manager
+// This is typically called when the player is no longer needed or when the game session ends.
+func (p *Player) Destroy() {
+	// Unregister from heartbeat manager
+	GlobalHeartbeat.Unregister(p)
+
+	if p.agent != nil {
+		p.agent.Destroy()
+	}
 }

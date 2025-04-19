@@ -88,7 +88,7 @@ func (p *PlayerManager) Players() []*Player {
 }
 
 // Remove removes a player from the player manager. If the player does not exist, it does nothing.
-func (p *PlayerManager) Remove(id string) error {
+func (p *PlayerManager) Remove(id string, destroy bool) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -97,7 +97,11 @@ func (p *PlayerManager) Remove(id string) error {
 	}
 
 	// Unregister from heartbeat manager
-	p.players[id].Close()
+	if destroy {
+		p.players[id].Destroy()
+	} else {
+		p.players[id].Close()
+	}
 
 	delete(p.players, id)
 	return nil
