@@ -41,9 +41,10 @@ type (
 	// agent implements network.Agent interface
 	// It is used to handle the connection and process messages.
 	agent struct {
-		conn     network.Conn
-		gate     *Gate
-		userdata any
+		conn       network.Conn
+		gate       *Gate
+		clientAddr network.ClientAddrMessage
+		userdata   any
 	}
 )
 
@@ -189,8 +190,15 @@ func (a *agent) Run() {
 	}
 }
 
+// ClientAddr implements network.Agent.
+func (a *agent) ClientAddr() network.ClientAddrMessage {
+	return a.clientAddr
+}
+
 // OnPreConn implements network.Agent.
-func (a *agent) OnPreConn(data network.PreHandlerMessage) {
+func (a *agent) OnPreConn(data network.ClientAddrMessage) {
+	a.clientAddr = data
+
 	if a.gate.preConn == nil {
 		return
 	}

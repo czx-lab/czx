@@ -31,6 +31,7 @@ type (
 		writeQueue chan []byte
 		done       bool
 		parse      *MessageParser
+		clientAddr network.ClientAddrMessage
 	}
 )
 
@@ -141,6 +142,17 @@ func (c *TcpConn) ReadMessage() ([]byte, error) {
 // RemoteAddr implements network.Conn.
 func (c *TcpConn) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
+}
+
+// ClientAddr implements network.Conn.
+func (c *TcpConn) ClientAddr() network.ClientAddrMessage {
+	return c.clientAddr
+}
+
+// withClientAddr sets the client address message for the GnetConn instance
+// This allows the user to specify the client address information associated with the connection
+func (c *TcpConn) withClientAddr(clientAddr network.ClientAddrMessage) {
+	c.clientAddr = clientAddr
 }
 
 // WriteMessage implements network.Conn.

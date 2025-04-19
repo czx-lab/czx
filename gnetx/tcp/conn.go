@@ -28,6 +28,7 @@ type (
 		// Queue for outgoing data
 		writeQueue chan []byte
 		parse      *xtcp.MessageParser
+		clientAddr network.ClientAddrMessage
 	}
 )
 
@@ -133,6 +134,17 @@ func (g *GnetConn) ReadMessage() (b []byte, err error) {
 // RemoteAddr implements network.Conn.
 func (g *GnetConn) RemoteAddr() net.Addr {
 	return g.gnetconn.RemoteAddr()
+}
+
+// ClientAddr implements network.Conn.
+func (g *GnetConn) ClientAddr() network.ClientAddrMessage {
+	return g.clientAddr
+}
+
+// withClientAddr sets the client address message for the GnetConn instance
+// This allows the user to specify the client address information associated with the connection
+func (g *GnetConn) withClientAddr(msg network.ClientAddrMessage) {
+	g.clientAddr = msg
 }
 
 // WriteMessage implements network.Conn.

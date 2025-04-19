@@ -88,8 +88,10 @@ func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 
 	ip, port, _ := network.GetClientIPFromProxyProtocol(c)
 	// Set the IP and port in the agent
-	agent.OnPreConn(network.PreHandlerMessage{IP: *ip, Port: *port})
+	clientAddr := network.ClientAddrMessage{IP: *ip, Port: *port}
+	agent.OnPreConn(clientAddr)
 
+	conn.withClientAddr(clientAddr)
 	c.SetContext(agent)
 
 	return nil, gnet.None

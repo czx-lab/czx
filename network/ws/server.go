@@ -92,7 +92,9 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ip, port := network.GetClientIP(r)
 
 	// Set the IP and port in the agent
-	agent.OnPreConn(network.PreHandlerMessage{Req: r, IP: *ip, Port: *port})
+	clentAddr := network.ClientAddrMessage{IP: *ip, Port: *port, Req: r}
+	wsconn.withClientAddr(clentAddr)
+	agent.OnPreConn(clentAddr)
 	agent.Run()
 
 	wsconn.Close()

@@ -17,9 +17,15 @@ type (
 		LocalAddr() net.Addr
 		// RemoteAddr returns the remote address of the connection.
 		RemoteAddr() net.Addr
+		// Returns the client address of the connection.
+		ClientAddr() ClientAddrMessage
 		// Close closes the connection.
+		// NOTE: Close guarantees that messages will not be lost
+		// but does not guarantee that the connection will be closed.
 		Close()
 		// Destroy closes the connection and releases resources.
+		// NOTE: Destroy does not guarantee that messages will not be lost
+		// it guarantees that the connection will be closed.
 		Destroy()
 	}
 
@@ -30,13 +36,14 @@ type (
 		Read([]byte) (int, error)
 	}
 
-	// PreHandlerMessage is a struct that contains information about an incoming connection and its associated request.
-	PreHandlerMessage struct {
+	// ClientAddrMessage is a struct that contains information about the client address and the request.
+	// It includes the IP address, port, and the HTTP request associated with the connection.
+	ClientAddrMessage struct {
 		IP   string
 		Port string
 		Req  *http.Request
 	}
 
 	// PreConnHandler is a function type that handles incoming connections and messages. It takes an Agent and a PreHandlerMessage as arguments and returns an error.
-	PreConnHandler func(Agent, PreHandlerMessage)
+	PreConnHandler func(Agent, ClientAddrMessage)
 )

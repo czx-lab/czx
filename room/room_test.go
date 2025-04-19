@@ -67,7 +67,7 @@ func TestRoom(t *testing.T) {
 
 		time.AfterFunc(2*time.Second, func() {
 			if err := room.WriteMessage(Message{
-				PlayerID: 1,
+				PlayerID: "1",
 				Msg:      []byte{'m', 'e'},
 			}); err != nil {
 				t.Error("write message err", err)
@@ -76,7 +76,7 @@ func TestRoom(t *testing.T) {
 
 		time.AfterFunc(10*time.Second, func() {
 			room.WriteMessage(Message{
-				PlayerID:  2,
+				PlayerID:  "2",
 				Msg:       []byte{'m', 'e', '2'},
 				Timestamp: time.Now(),
 			})
@@ -115,7 +115,7 @@ func TestRoomManager(t *testing.T) {
 		fmt.Println(111111)
 
 		room.WriteMessage(Message{
-			PlayerID: 2,
+			PlayerID: "2",
 			Msg:      []byte{'m', 'e', '2'},
 		})
 

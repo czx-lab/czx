@@ -21,7 +21,7 @@ func main() {
 	}
 
 	closeFlag := make(chan struct{})
-	gateway := agent.NewGate(*gateConf).WithPreConn(func(a network.Agent, phm network.PreHandlerMessage) {
+	gateway := agent.NewGate(*gateConf).WithPreConn(func(a network.Agent, phm network.ClientAddrMessage) {
 		// Pre-handler message logic here
 		fmt.Println("Pre-handler message:", phm)
 	}).WithFlag(closeFlag)

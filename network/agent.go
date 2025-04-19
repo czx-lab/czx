@@ -17,6 +17,9 @@ type (
 		LocalAddr() net.Addr
 		// RemoteAddr returns the remote address of the connection.
 		RemoteAddr() net.Addr
+		// ClientAddr returns the client address of the connection.
+		// This includes the IP address, port, and the HTTP request associated with the connection.
+		ClientAddr() ClientAddrMessage
 		// Close closes the connection.
 		Close()
 		// Destroy cleans up the agent and releases resources.
@@ -29,7 +32,7 @@ type (
 		GetUserData() any
 		// PreConnHandler is a function that handles incoming connections and messages.
 		// It takes an Agent and a PreHandlerMessage as arguments and returns an error.
-		OnPreConn(PreHandlerMessage)
+		OnPreConn(ClientAddrMessage)
 	}
 
 	// GnetAgent is an interface for handling incoming data in a gnet connection.

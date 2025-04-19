@@ -34,7 +34,8 @@ type (
 		// Channel for writing messages to the connection
 		writeChan chan []byte
 		// Flag to indicate if the connection is closed
-		closeFlag bool
+		closeFlag  bool
+		clientAddr network.ClientAddrMessage // Client address message
 	}
 )
 
@@ -124,6 +125,17 @@ func (w *WsConn) LocalAddr() net.Addr {
 // RemoteAddr implements Conn.
 func (w *WsConn) RemoteAddr() net.Addr {
 	return w.conn.RemoteAddr()
+}
+
+// ClientAddr implements network.Conn.
+func (w *WsConn) ClientAddr() network.ClientAddrMessage {
+	return w.clientAddr
+}
+
+// withClientAddr sets the client address message for the GnetConn instance
+// This allows the user to specify the client address information associated with the connection
+func (w *WsConn) withClientAddr(msg network.ClientAddrMessage) {
+	w.clientAddr = msg
 }
 
 // ReadMessage implements Conn.
