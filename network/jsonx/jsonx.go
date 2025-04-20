@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
 )
 
@@ -164,7 +163,7 @@ func (p *Processor) Register(id uint16, msg any) error {
 func (p *Processor) RegisterExceptID(msg any) error {
 	msgtype := reflect.TypeOf(msg)
 	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
-		log.Fatal("json message pointer required")
+		return errors.New("json message pointer required")
 	}
 
 	// check if the message is registered
