@@ -213,6 +213,36 @@ WithHandlerExec:
 	return nil
 }
 
+// RegisterRawHandler implements network.JsonProcessor.
+func (p *Processor) RegisterRawHandler(msg any, handler network.Handler) error {
+	msgtype := reflect.TypeOf(msg)
+	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
+		return errors.New("json message pointer required")
+	}
+
+	var info *message
+	msgname := msgtype.Elem().Name()
+	id, ok := p.ids[msgname]
+	if ok {
+		info, ok = p.messages[id]
+		if !ok {
+			return fmt.Errorf("message %v not registered", id)
+		}
+
+		goto WithHandlerExec
+	}
+
+	info, ok = p.messagesByName[msgname]
+	if !ok {
+		return fmt.Errorf("message %v not registered", msgname)
+	}
+
+WithHandlerExec:
+	info.rawHandler = handler
+
+	return nil
+}
+
 // Unmarshal implements network.Processor.
 func (p *Processor) Unmarshal(data []byte) (any, error) {
 	var m map[any]json.RawMessage

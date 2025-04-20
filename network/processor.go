@@ -25,6 +25,9 @@ type (
 		Register(id uint16, msg any) error
 		// RegisterHandler registers a handler for a message type.
 		RegisterHandler(msg any, handler Handler) error
+		// RegisterRawHandler registers a raw handler for a message type.
+		// This handler is called before the message is unmarshalled.
+		RegisterRawHandler(msg any, handler Handler) error
 	}
 
 	// JsonProcessor defines the interface for JSON processing.

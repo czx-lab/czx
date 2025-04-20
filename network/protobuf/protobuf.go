@@ -166,6 +166,18 @@ func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 	return nil
 }
 
+// RegisterRawHandler implements network.Processor.
+func (p *Processor) RegisterRawHandler(msg any, handler network.Handler) error {
+	msgtype := reflect.TypeOf(msg)
+	id, ok := p.ids[msgtype]
+	if !ok {
+		return fmt.Errorf("protobuf: message %s not registered", msgtype)
+	}
+
+	p.messages[id].rawHandler = handler
+	return nil
+}
+
 // Range implements network.Processor.
 func (p *Processor) Range(fn func(id uint16, msgtyoe reflect.Type)) {
 	for _, i := range p.messages {
