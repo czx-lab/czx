@@ -22,7 +22,7 @@ type (
 	}
 	// raw represents a raw protobuf message with its ID and data.
 	// It is used for processing raw data without unmarshalling it into a specific message type.
-	raw struct {
+	Raw struct {
 		id   uint16
 		data []byte
 	}
@@ -81,7 +81,7 @@ func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
 
 // Process implements network.Processor.
 func (p *Processor) Process(data any) error {
-	if raw, ok := data.(raw); ok {
+	if raw, ok := data.(Raw); ok {
 		info, ok := p.messages[raw.id]
 		if !ok {
 			return fmt.Errorf("message id %v not registered", raw.id)
@@ -124,7 +124,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 		return nil, fmt.Errorf("protobuf: message ID %d not registered", id)
 	}
 	if info.rawHandler != nil {
-		return raw{id, data[2:]}, nil
+		return Raw{id, data[2:]}, nil
 	}
 
 	msg := reflect.New(info.msgtype.Elem()).Interface()
@@ -132,7 +132,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 }
 
 // Register implements network.Processor.
-func (p *Processor) Register(id uint16, msg proto.Message) error {
+func (p *Processor) Register(id uint16, msg any) error {
 	msgtype := reflect.TypeOf(msg)
 	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
 		return errors.New("protobuf: message must be a pointer")
@@ -155,7 +155,7 @@ func (p *Processor) Register(id uint16, msg proto.Message) error {
 }
 
 // RegisterHandler implements network.Processor.
-func (p *Processor) RegisterHandler(msg proto.Message, handler network.Handler) error {
+func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 	msgtype := reflect.TypeOf(msg)
 	id, ok := p.ids[msgtype]
 	if !ok {

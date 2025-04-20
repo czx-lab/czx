@@ -1,9 +1,5 @@
 package network
 
-import (
-	"google.golang.org/protobuf/proto"
-)
-
 type (
 	ProcessorConf struct {
 		// LittleEndian indicates if the processor should use little-endian byte order.
@@ -26,8 +22,14 @@ type (
 		// MarshalWithCode converts the message to a byte slice with a specific code.
 		MarshalWithCode(code uint16, msg any) ([][]byte, error)
 		// Register registers a message type with an ID.
-		Register(id uint16, msg proto.Message) error
+		Register(id uint16, msg any) error
 		// RegisterHandler registers a handler for a message type.
-		RegisterHandler(msg proto.Message, handler Handler) error
+		RegisterHandler(msg any, handler Handler) error
+	}
+
+	// JsonProcessor defines the interface for JSON processing.
+	JsonProcessor interface {
+		Processor
+		RegisterExceptID(msg any) error // Register a message type without an ID.
 	}
 )
