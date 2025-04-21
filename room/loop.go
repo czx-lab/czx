@@ -46,31 +46,18 @@ LOOP:
 		select {
 		case <-ticker.C:
 			// Process messages
-			select {
-			case msg := <-l.msgs:
-				if err := l.processor.Process(msg); err != nil {
-					xlog.Write().Error("Error processing message:", zap.Error(err))
-					l.Stop()
-					break
-				}
-				lastActivity = time.Now() // Update the last activity time
-			default:
-				// No message in the channel, skip processing
-			}
+			l.processMessage(lastActivity)
 
-			// Handle heartbeat if the interval has passed
-			if time.Since(lastHeartbeat) >= l.opt.heartbeatFrequency {
-				if err := l.processor.HandleIdle(); err != nil {
-					xlog.Write().Error("Error handling idle:", zap.Error(err))
-					l.Stop()
-					break
-				}
-				lastHeartbeat = time.Now() // Update the last heartbeat time
+			// Check for heartbeat
+			heartbeat := l.checkHeartbeat(lastHeartbeat)
+			if !heartbeat {
+				break
 			}
 
 			// Check for timeout
-			if l.opt.timeout > 0 && time.Since(lastActivity) > l.opt.timeout {
-				l.Stop()
+			timeout := l.checkTimeout(lastActivity)
+			if !timeout {
+				break
 			}
 		case <-l.quit:
 			break LOOP
@@ -78,6 +65,47 @@ LOOP:
 	}
 
 	return l.processor.Close()
+}
+
+// checkTimeout checks if the timeout has been reached
+// and stops the loop if it has.
+func (l *Loop) checkTimeout(lastActivity time.Time) bool {
+	if l.opt.timeout > 0 && time.Since(lastActivity) > l.opt.timeout {
+		l.Stop()
+		return false
+	}
+
+	return true
+}
+
+// Handle heartbeat if the interval has passed
+func (l *Loop) checkHeartbeat(lastHeartbeat time.Time) bool {
+	if time.Since(lastHeartbeat) >= l.opt.heartbeatFrequency {
+		if err := l.processor.HandleIdle(); err != nil {
+			xlog.Write().Error("Error handling idle:", zap.Error(err))
+			l.Stop()
+			return false
+		}
+		lastHeartbeat = time.Now() // Update the last heartbeat time
+	}
+
+	return true
+}
+
+// processMessage processes messages from the channel
+// and updates the last activity time.
+func (l *Loop) processMessage(lastActivity time.Time) {
+	select {
+	case msg := <-l.msgs:
+		if err := l.processor.Process(msg); err != nil {
+			xlog.Write().Error("Error processing message:", zap.Error(err))
+			l.Stop()
+			break
+		}
+		lastActivity = time.Now() // Update the last activity time
+	default:
+		// No message in the channel, skip processing
+	}
 }
 
 // Stop the loop and close the quit channel
