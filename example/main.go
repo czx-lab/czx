@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/czx-lab/czx/agent"
 	"github.com/czx-lab/czx/eventbus"
@@ -17,7 +16,7 @@ func main() {
 			MaxConn:         100000,
 			PendingWriteNum: 1000,
 			MaxMsgSize:      4096,
-			Timeout:         10 * time.Second,
+			Timeout:         10,
 		},
 	}
 

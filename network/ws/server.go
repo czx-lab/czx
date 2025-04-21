@@ -19,8 +19,8 @@ type WsServerConf struct {
 	KeyFile         string
 	MaxConn         int
 	PendingWriteNum int
+	Timeout         int
 	MaxMsgSize      uint32
-	Timeout         time.Duration
 }
 
 type WsHandler struct {
@@ -134,8 +134,8 @@ func (server *WsServer) Start() error {
 	httpServer := &http.Server{
 		Addr:           server.opt.Addr,
 		Handler:        server.handler,
-		ReadTimeout:    server.opt.Timeout,
-		WriteTimeout:   server.opt.Timeout,
+		ReadTimeout:    time.Duration(server.opt.Timeout) * time.Second,
+		WriteTimeout:   time.Duration(server.opt.Timeout) * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 	go httpServer.Serve(ln)
