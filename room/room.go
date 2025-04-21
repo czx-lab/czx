@@ -48,7 +48,7 @@ func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomCo
 	return room
 }
 
-func (r *Room) ID() uint64 {
+func (r *Room) ID() string {
 	return r.opt.roomID
 }
 

@@ -6,7 +6,7 @@ import (
 
 const (
 	// default room id
-	defaultRoomID uint64 = 1
+	defaultRoomID = "1"
 	// game logic frame processing frequency
 	frequency = time.Second / 30
 	// game logic frame processing timeout
@@ -25,7 +25,7 @@ type (
 		// size of the message buffer
 		maxBufferSize uint64
 		// room id
-		roomID uint64
+		roomID string
 		// max player count
 		maxPlayer int
 		// frequency of game logic frame processing
@@ -62,7 +62,7 @@ func NewOption(opts ...IOption) *RoomConf {
 	return opt
 }
 
-func WithRoomID(id uint64) OptionFunc {
+func WithRoomID(id string) OptionFunc {
 	return func(o *RoomConf) {
 		o.roomID = id
 	}

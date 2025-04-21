@@ -47,7 +47,7 @@ var _ RoomProcessor = (*roomprocessor)(nil)
 func TestRoom(t *testing.T) {
 	t.Run("room test", func(t *testing.T) {
 		opt := NewOption(
-			WithRoomID(1),
+			WithRoomID("1"),
 			WithMaxPlayer(5),
 			WithMaxBufferSize(4096),
 			WithFrequency(30*time.Millisecond),
@@ -55,7 +55,7 @@ func TestRoom(t *testing.T) {
 			WithHeartbeat(3*time.Second),
 		)
 		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
-		if room.ID() != 1 {
+		if room.ID() != "1" {
 			t.Errorf("expected room id 1, got %d", room.ID())
 		}
 
@@ -99,7 +99,7 @@ func TestRoomManager(t *testing.T) {
 		rm := NewRoomManager()
 
 		opt := NewOption(
-			WithRoomID(1),
+			WithRoomID("1"),
 			WithMaxPlayer(5),
 			WithMaxBufferSize(4096),
 			WithFrequency(30*time.Millisecond),

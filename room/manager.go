@@ -16,13 +16,13 @@ var (
 type RoomManager struct {
 	wg    sync.WaitGroup
 	mu    sync.RWMutex
-	rooms map[uint64]*Room
+	rooms map[string]*Room
 }
 
 // NewRoomManager creates a new RoomManager instance.
 func NewRoomManager() *RoomManager {
 	return &RoomManager{
-		rooms: make(map[uint64]*Room),
+		rooms: make(map[string]*Room),
 	}
 }
 
@@ -50,7 +50,7 @@ func (rm *RoomManager) Add(room *Room) error {
 }
 
 // Get retrieves a room by its ID.
-func (rm *RoomManager) Get(roomID uint64) (*Room, error) {
+func (rm *RoomManager) Get(roomID string) (*Room, error) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
@@ -82,7 +82,7 @@ func (rm *RoomManager) Stop() {
 	}
 
 	// Clear the rooms map before waiting for all rooms to stop.
-	rm.rooms = make(map[uint64]*Room)
+	rm.rooms = make(map[string]*Room)
 
 	rm.wg.Wait()
 }
