@@ -1,9 +1,10 @@
 package czx
 
 import (
-	"czx/xlog"
 	"runtime"
 	"sync"
+
+	"github.com/czx-lab/czx/xlog"
 
 	"go.uber.org/zap"
 )

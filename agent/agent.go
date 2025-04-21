@@ -1,17 +1,18 @@
 package agent
 
 import (
-	"czx/eventbus"
-	gnetcp "czx/gnetx/tcp"
-	"czx/network"
-	xtcp "czx/network/tcp"
-	"czx/network/ws"
-	"czx/xlog"
 	"errors"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/czx-lab/czx/eventbus"
+	gnetcp "github.com/czx-lab/czx/gnetx/tcp"
+	"github.com/czx-lab/czx/network"
+	xtcp "github.com/czx-lab/czx/network/tcp"
+	"github.com/czx-lab/czx/network/ws"
+	"github.com/czx-lab/czx/xlog"
 
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"

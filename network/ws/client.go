@@ -1,9 +1,10 @@
 package ws
 
 import (
-	"czx/network"
 	"sync"
 	"time"
+
+	"github.com/czx-lab/czx/network"
 
 	"github.com/gorilla/websocket"
 )

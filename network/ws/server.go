@@ -2,12 +2,13 @@ package ws
 
 import (
 	"crypto/tls"
-	"czx/network"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/czx-lab/czx/network"
 
 	"github.com/gorilla/websocket"
 )

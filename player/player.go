@@ -1,7 +1,7 @@
 package player
 
 import (
-	"czx/network"
+	"github.com/czx-lab/czx/network"
 )
 
 type Player struct {

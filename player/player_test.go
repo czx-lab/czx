@@ -1,9 +1,10 @@
 package player
 
 import (
-	"czx/network"
 	"testing"
 	"time"
+
+	"github.com/czx-lab/czx/network"
 )
 
 func TestPlayer(t *testing.T) {

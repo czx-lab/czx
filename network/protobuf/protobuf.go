@@ -1,12 +1,13 @@
 package protobuf
 
 import (
-	"czx/network"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
 	"reflect"
+
+	"github.com/czx-lab/czx/network"
 
 	"google.golang.org/protobuf/proto"
 )

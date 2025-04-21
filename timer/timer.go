@@ -1,9 +1,10 @@
 package timer
 
 import (
-	"czx/xlog"
 	"runtime"
 	"time"
+
+	"github.com/czx-lab/czx/xlog"
 )
 
 type (

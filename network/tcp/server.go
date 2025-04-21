@@ -1,10 +1,11 @@
 package tcp
 
 import (
-	"czx/network"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/czx-lab/czx/network"
 )
 
 var (

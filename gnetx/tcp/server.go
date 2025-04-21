@@ -2,11 +2,12 @@ package tcp
 
 import (
 	"context"
-	"czx/network"
-	xtcp "czx/network/tcp"
-	"czx/xlog"
 	"strings"
 	"time"
+
+	"github.com/czx-lab/czx/network"
+	xtcp "github.com/czx-lab/czx/network/tcp"
+	"github.com/czx-lab/czx/xlog"
 
 	"github.com/panjf2000/gnet/v2"
 	"go.uber.org/zap"

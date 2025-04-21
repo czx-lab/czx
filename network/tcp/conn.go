@@ -1,10 +1,11 @@
 package tcp
 
 import (
-	"czx/network"
-	"czx/xlog"
 	"net"
 	"sync"
+
+	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/xlog"
 
 	"go.uber.org/zap"
 )

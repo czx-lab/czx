@@ -1,4 +1,4 @@
-module czx
+module github.com/czx-lab/czx
 
 go 1.24.2
 

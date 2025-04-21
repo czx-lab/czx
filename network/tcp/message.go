@@ -1,11 +1,12 @@
 package tcp
 
 import (
-	"czx/network"
 	"encoding/binary"
 	"errors"
 	"io"
 	"math"
+
+	"github.com/czx-lab/czx/network"
 )
 
 var (

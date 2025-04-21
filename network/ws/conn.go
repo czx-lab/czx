@@ -1,11 +1,12 @@
 package ws
 
 import (
-	"czx/network"
-	"czx/xlog"
 	"errors"
 	"net"
 	"sync"
+
+	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/xlog"
 
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"

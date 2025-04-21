@@ -1,12 +1,13 @@
 package jsonx
 
 import (
-	"czx/network"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+
+	"github.com/czx-lab/czx/network"
 )
 
 type (

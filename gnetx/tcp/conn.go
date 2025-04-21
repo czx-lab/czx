@@ -1,10 +1,11 @@
 package tcp
 
 import (
-	"czx/network"
-	xtcp "czx/network/tcp"
 	"net"
 	"sync"
+
+	"github.com/czx-lab/czx/network"
+	xtcp "github.com/czx-lab/czx/network/tcp"
 
 	"github.com/panjf2000/gnet/v2"
 )

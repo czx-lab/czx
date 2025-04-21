@@ -1,12 +1,13 @@
 package main
 
 import (
-	"czx/agent"
-	"czx/eventbus"
-	"czx/network"
-	"czx/network/ws"
 	"fmt"
 	"time"
+
+	"github.com/czx-lab/czx/agent"
+	"github.com/czx-lab/czx/eventbus"
+	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/network/ws"
 )
 
 func main() {
