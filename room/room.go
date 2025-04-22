@@ -17,7 +17,7 @@ type Room struct {
 	opt *RoomConf
 
 	// mu is used to protect the room state and the loop
-	mu sync.Mutex
+	mu sync.RWMutex
 	// loop is used to run the room loop
 	// and send messages to Kafka
 	// and receive messages from Kafka
@@ -137,4 +137,13 @@ func (r *Room) Stop() {
 
 	// Stop the loop synchronously to ensure proper cleanup.
 	r.loop.Stop()
+}
+
+// Number of players in the room
+// Returns the number of players in the room
+func (r *Room) Num() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return len(r.players)
 }

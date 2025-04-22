@@ -63,6 +63,15 @@ func (rm *RoomManager) Get(roomID string) (*Room, error) {
 	return room, nil
 }
 
+// Check if the room exists in the manager.
+func (rm *RoomManager) Has(roomID string) bool {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	_, exists := rm.rooms[roomID]
+	return exists
+}
+
 // Num returns the number of rooms managed by the RoomManager.
 func (rm *RoomManager) Num() int {
 	rm.mu.RLock()
@@ -101,6 +110,8 @@ func (rm *RoomManager) Range(fn func(*Room)) {
 }
 
 // Number of players in the room
+// Returns a map where the key is the room ID and the value is the number of players in that room.
+// This function is not thread-safe, so it should be called with the room manager locked.
 func (rm *RoomManager) RoomsPlayerNum() map[string]int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
