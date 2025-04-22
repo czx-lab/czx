@@ -47,18 +47,20 @@ LOOP:
 		select {
 		case <-ticker.C:
 			// Process messages
-			l.processMessage(lastActivity)
+			lastActivity = l.processMessage(lastActivity)
 
 			// Check for heartbeat
-			heartbeat := l.checkHeartbeat(lastHeartbeat)
+			heartbeat, ht := l.checkHeartbeat(lastHeartbeat)
 			if !heartbeat {
-				break
+				break LOOP
 			}
+
+			lastHeartbeat = ht
 
 			// Check for timeout
 			timeout := l.checkTimeout(lastActivity)
 			if !timeout {
-				break
+				break LOOP
 			}
 		case <-l.quit:
 			break LOOP
@@ -80,22 +82,22 @@ func (l *Loop) checkTimeout(lastActivity time.Time) bool {
 }
 
 // Handle heartbeat if the interval has passed
-func (l *Loop) checkHeartbeat(lastHeartbeat time.Time) bool {
+func (l *Loop) checkHeartbeat(lastHeartbeat time.Time) (bool, time.Time) {
 	if time.Since(lastHeartbeat) >= l.opt.heartbeatFrequency {
 		if err := l.processor.HandleIdle(); err != nil {
 			xlog.Write().Error("Error handling idle:", zap.Error(err))
 			l.Stop()
-			return false
+			return false, lastHeartbeat
 		}
 		lastHeartbeat = time.Now() // Update the last heartbeat time
 	}
 
-	return true
+	return true, lastHeartbeat
 }
 
 // processMessage processes messages from the channel
 // and updates the last activity time.
-func (l *Loop) processMessage(lastActivity time.Time) {
+func (l *Loop) processMessage(lastActivity time.Time) time.Time {
 	select {
 	case msg := <-l.msgs:
 		if err := l.processor.Process(msg); err != nil {
@@ -107,6 +109,8 @@ func (l *Loop) processMessage(lastActivity time.Time) {
 	default:
 		// No message in the channel, skip processing
 	}
+
+	return lastActivity
 }
 
 // Stop the loop and close the quit channel
