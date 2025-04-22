@@ -14,7 +14,8 @@ var (
 
 type (
 	ManagerConf struct {
-		HeartbeatInterval time.Duration
+		// Heartbeat interval in seconds
+		HeartbeatInterval int
 	}
 	PlayerManager struct {
 		sync.RWMutex
@@ -71,7 +72,7 @@ func (p *PlayerManager) Start() {
 		p.conf.HeartbeatInterval = DefaultHeartbeatInterval
 	}
 
-	GlobalHeartbeat.Start(p.conf.HeartbeatInterval)
+	GlobalHeartbeat.Start(time.Duration(p.conf.HeartbeatInterval) * time.Second)
 }
 
 // Players retrieves all agents from the player. This function is not thread-safe, so it should be called with the player locked.

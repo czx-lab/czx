@@ -13,7 +13,7 @@ type (
 		Hosts []string
 		// Optional reconnect options
 		MaxReconnects int
-		ReconnectWait time.Duration
+		ReconnectWait int
 	}
 	Nats struct {
 		conf *NatsConf
@@ -34,7 +34,7 @@ func NewNats(conf *NatsConf) (*Nats, error) {
 
 	opts := []nats.Option{
 		nats.MaxReconnects(conf.MaxReconnects),
-		nats.ReconnectWait(conf.ReconnectWait),
+		nats.ReconnectWait(time.Duration(conf.ReconnectWait) * time.Second),
 	}
 
 	// Connect to multiple NATS servers

@@ -8,7 +8,7 @@ import (
 )
 
 // Default heartbeat interval
-var DefaultHeartbeatInterval = 5 * time.Second
+var DefaultHeartbeatInterval = 5
 
 type Heartbeat struct {
 	players map[*Player]struct{}

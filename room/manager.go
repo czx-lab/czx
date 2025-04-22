@@ -87,3 +87,28 @@ func (rm *RoomManager) Stop() {
 
 	rm.wg.Wait()
 }
+
+// Iterate over all rooms and apply the function.
+// This function is not thread-safe, so it should be called with the room manager locked.
+// It is recommended to use this function for read-only operations on rooms.
+func (rm *RoomManager) Range(fn func(*Room)) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	for _, room := range rm.rooms {
+		fn(room)
+	}
+}
+
+// Number of players in the room
+func (rm *RoomManager) RoomsPlayerNum() map[string]int {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	nums := make(map[string]int)
+	for _, room := range rm.rooms {
+		nums[room.ID()] = len(room.players)
+	}
+
+	return nums
+}
