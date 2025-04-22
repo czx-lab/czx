@@ -147,3 +147,13 @@ func (r *Room) Num() int {
 
 	return len(r.players)
 }
+
+// Check if the player is in the room
+// Returns true if the player is in the room, false otherwise
+func (r *Room) Has(playerID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	_, ok := r.players[playerID]
+	return ok
+}
