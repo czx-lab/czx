@@ -33,6 +33,9 @@ type Room struct {
 	// rpcClient is used to send messages to the room
 	// and receive messages from the room
 	processor RoomProcessor
+
+	// data is used to store the room data
+	data any
 }
 
 func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
@@ -50,6 +53,21 @@ func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomCo
 
 func (r *Room) ID() string {
 	return r.opt.roomID
+}
+
+// WithData is used to set the room data
+func (r *Room) WithData(data any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.data = data
+}
+
+// GetData is used to get the room data
+func (r *Room) Data() any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.data
 }
 
 // Message is used to send messages to the room
