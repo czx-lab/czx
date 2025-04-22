@@ -88,6 +88,14 @@ func (p *PlayerManager) Players() []*Player {
 	return players
 }
 
+// Num returns the number of players in the player manager.
+func (p *PlayerManager) Num() int {
+	p.RLock()
+	defer p.RUnlock()
+
+	return len(p.players)
+}
+
 // Remove removes a player from the player manager. If the player does not exist, it does nothing.
 func (p *PlayerManager) Remove(id string, destroy bool) error {
 	p.Lock()
