@@ -99,6 +99,15 @@ func (r *Room) Leave(playerID string) error {
 	return r.processor.Leave(playerID)
 }
 
+// Check if the room is running
+// Returns true if the room is running, false otherwise
+func (r *Room) Status() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.running
+}
+
 // Start the room loop and process messages
 // in a separate goroutine. It will run until the loop is stopped or an error occurs.
 func (r *Room) Start() error {
