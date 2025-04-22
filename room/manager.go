@@ -123,3 +123,28 @@ func (rm *RoomManager) RoomsPlayerNum() map[string]int {
 
 	return nums
 }
+
+// Returns a slice of all rooms managed by the RoomManager.
+func (rm *RoomManager) Rooms() []*Room {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	rooms := make([]*Room, 0, len(rm.rooms))
+	for _, room := range rm.rooms {
+		rooms = append(rooms, room)
+	}
+	return rooms
+}
+
+// Get the players in the room
+func (rm *RoomManager) Players(roomId string) ([]string, error) {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+
+	room, ok := rm.rooms[roomId]
+	if !ok {
+		return nil, ErrRoomNotFound
+	}
+
+	return room.Players(), nil
+}

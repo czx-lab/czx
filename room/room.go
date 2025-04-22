@@ -157,3 +157,20 @@ func (r *Room) Has(playerID string) bool {
 	_, ok := r.players[playerID]
 	return ok
 }
+
+// Returns a slice of player IDs in the room
+func (r *Room) Players() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if len(r.players) == 0 {
+		return nil
+	}
+
+	var players []string
+	for player := range r.players {
+		players = append(players, player)
+	}
+
+	return players
+}
