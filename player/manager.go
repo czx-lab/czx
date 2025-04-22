@@ -156,6 +156,23 @@ func (p *PlayerManager) BroadcastExcepts(msg BroadcastMessage, ids ...string) er
 	})
 }
 
+// BroadcastByIds sends a message to players with the specified IDs.
+// It can be used to send messages to specific players based on their IDs.
+func (p *PlayerManager) BroadcastByIds(msg BroadcastMessage, ids ...string) error {
+	return p.Rang(func(player *Player) {
+		if !slices.Contains(ids, player.ID()) {
+			return
+		}
+
+		if msg.Code == 0 {
+			player.Agent().Write(msg.Data)
+			return
+		}
+
+		player.Agent().WriteWithCode(msg.Code, msg.Data)
+	})
+}
+
 // BroadcastByFunc sends a message to players that match the provided function.
 // It can be used to send messages to specific players based on custom logic.
 func (p *PlayerManager) BroadcastByFunc(msg BroadcastMessage, fn func(*Player) bool) error {
