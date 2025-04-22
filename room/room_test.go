@@ -22,7 +22,7 @@ func (m *msgprocessor) HandleIdle() error {
 
 // Process implements MessageProcessor.
 func (m *msgprocessor) Process(msg Message) error {
-	fmt.Printf("msgprocessor Process playerId = %v, msg = %+v", msg.PlayerID, string(msg.Msg))
+	fmt.Printf("msgprocessor Process playerId = %v, msg = %+v \n", msg.PlayerID, string(msg.Msg))
 	return nil
 }
 
@@ -56,7 +56,7 @@ func TestRoom(t *testing.T) {
 		)
 		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
 		if room.ID() != "1" {
-			t.Errorf("expected room id 1, got %d", room.ID())
+			t.Errorf("expected room id 1, got %v", room.ID())
 		}
 
 		go func() {
@@ -106,10 +106,22 @@ func TestRoomManager(t *testing.T) {
 			// WithTimeout(10*time.Second),
 			WithHeartbeat(3*time.Second),
 		)
+		opt1 := NewOption(
+			WithRoomID("2"),
+			WithMaxPlayer(5),
+			WithMaxBufferSize(4096),
+			WithFrequency(30*time.Millisecond),
+			// WithTimeout(10*time.Second),
+			WithHeartbeat(3*time.Second),
+		)
 		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
+		room1 := NewRoom(&roomprocessor{}, &msgprocessor{}, opt1)
 
 		if err := rm.Add(room); err != nil {
 			t.Errorf("add room err %v", err)
+		}
+		if err := rm.Add(room1); err != nil {
+			t.Errorf("add room1 err %v", err)
 		}
 
 		fmt.Println(111111)
@@ -124,7 +136,9 @@ func TestRoomManager(t *testing.T) {
 		room.Join("12")
 
 		room.Leave("10")
+		rm.Remove("2")
 
+		time.Sleep(10 * time.Second)
 		rm.Stop()
 
 		for {

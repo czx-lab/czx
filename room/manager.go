@@ -50,6 +50,24 @@ func (rm *RoomManager) Add(room *Room) error {
 	return nil
 }
 
+// Remove removes a room from the manager by its ID.
+// It stops the room and waits for it to finish processing before removing it.
+func (rm *RoomManager) Remove(roomID string) error {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	room, exists := rm.rooms[roomID]
+	if !exists {
+		return ErrRoomNotFound
+	}
+
+	room.Stop()
+
+	delete(rm.rooms, roomID)
+
+	return nil
+}
+
 // Get retrieves a room by its ID.
 func (rm *RoomManager) Get(roomID string) (*Room, error) {
 	rm.mu.RLock()

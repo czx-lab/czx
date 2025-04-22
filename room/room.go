@@ -139,7 +139,15 @@ func (r *Room) stop() {
 // Stop the room loop and release resources
 // Stop the loop and release resources
 func (r *Room) Stop() {
+	// Check if the room is running
+	// and stop the loop if it is
+	// This is to prevent multiple calls to Stop()
+	status := r.Status()
 	r.stop()
+
+	if !status {
+		return
+	}
 
 	// Remove the stop callback.
 	r.loop.stopCallback(nil)
