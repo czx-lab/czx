@@ -52,13 +52,20 @@ type (
 		Ctrl  Point
 	}
 	Bezier struct {
-		conf       BezierConf
-		curveCtrls []curveCtrl
+		conf         BezierConf
+		curveCtrls   []curveCtrl
+		speedHandler func(curvature float64) float64
 	}
 )
 
 func New(conf BezierConf) *Bezier {
 	return &Bezier{conf: conf}
+}
+
+// WithSpeedHandler sets the speed handler for the bezier curve
+// The handler should return the speed based on the curvature of the bezier curve
+func (b *Bezier) WithSpeedHandler(handler func(curvature float64) float64) {
+	b.speedHandler = handler
 }
 
 // Ctrls generates the control points of the bezier curve
@@ -156,9 +163,18 @@ func (b *Bezier) calculateSpeed(points []Point, current Point, direction Directi
 		curvature = b.calcCurvature(points[0], points[1], points[2])
 	}
 
-	speed := max(0.01/(1+curvature*10), 0.001)
+	var speed float64
+	if b.speedHandler != nil {
+		speed = b.speedHandler(curvature)
+	} else {
+		speed = defaultSpeedHandler(curvature)
+	}
 
 	return float64(direction) * speed
+}
+
+func defaultSpeedHandler(curvature float64) float64 {
+	return max(0.01/(1+curvature*10), 0.001)
 }
 
 // calcCurvature calculates the curvature of the bezier curve
