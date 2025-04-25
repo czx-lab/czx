@@ -4,29 +4,9 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/czx-lab/czx/frame"
 )
-
-type msgprocessor struct{}
-
-// Close implements MessageProcessor.
-func (m *msgprocessor) Close() error {
-	fmt.Println("msgprocessor closed")
-	return nil
-}
-
-// HandleIdle implements MessageProcessor.
-func (m *msgprocessor) HandleIdle() error {
-	fmt.Println("msgprocessor HandleIdle")
-	return nil
-}
-
-// Process implements MessageProcessor.
-func (m *msgprocessor) Process(msg Message) error {
-	fmt.Printf("msgprocessor Process playerId = %v, msg = %+v \n", msg.PlayerID, string(msg.Msg))
-	return nil
-}
-
-var _ MessageProcessor = (*msgprocessor)(nil)
 
 type roomprocessor struct{}
 
@@ -54,7 +34,7 @@ func TestRoom(t *testing.T) {
 			// WithTimeout(10*time.Second),
 			WithHeartbeat(3*time.Second),
 		)
-		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
+		room := NewRoom(&roomprocessor{}, opt)
 		if room.ID() != "1" {
 			t.Errorf("expected room id 1, got %v", room.ID())
 		}
@@ -66,19 +46,18 @@ func TestRoom(t *testing.T) {
 		}()
 
 		time.AfterFunc(2*time.Second, func() {
-			if err := room.WriteMessage(Message{
+			if err := room.WriteMessage(frame.Message{
 				PlayerID: "1",
-				Msg:      []byte{'m', 'e'},
+				Data:     []byte{'m', 'e'},
 			}); err != nil {
 				t.Error("write message err", err)
 			}
 		})
 
 		time.AfterFunc(10*time.Second, func() {
-			room.WriteMessage(Message{
-				PlayerID:  "2",
-				Msg:       []byte{'m', 'e', '2'},
-				Timestamp: time.Now(),
+			room.WriteMessage(frame.Message{
+				PlayerID: "2",
+				Data:     []byte{'m', 'e', '2'},
 			})
 
 			room.Join("10")
@@ -114,8 +93,8 @@ func TestRoomManager(t *testing.T) {
 			// WithTimeout(10*time.Second),
 			WithHeartbeat(3*time.Second),
 		)
-		room := NewRoom(&roomprocessor{}, &msgprocessor{}, opt)
-		room1 := NewRoom(&roomprocessor{}, &msgprocessor{}, opt1)
+		room := NewRoom(&roomprocessor{}, opt)
+		room1 := NewRoom(&roomprocessor{}, opt1)
 
 		if err := rm.Add(room); err != nil {
 			t.Errorf("add room err %v", err)
@@ -126,9 +105,9 @@ func TestRoomManager(t *testing.T) {
 
 		fmt.Println(111111)
 
-		room.WriteMessage(Message{
+		room.WriteMessage(frame.Message{
 			PlayerID: "2",
-			Msg:      []byte{'m', 'e', '2'},
+			Data:     []byte{'m', 'e', '2'},
 		})
 
 		room.Join("10")

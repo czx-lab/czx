@@ -3,6 +3,8 @@ package room
 import (
 	"errors"
 	"sync"
+
+	"github.com/czx-lab/czx/frame"
 )
 
 var (
@@ -21,7 +23,7 @@ type Room struct {
 	// loop is used to run the room loop
 	// and send messages to Kafka
 	// and receive messages from Kafka
-	loop *Loop
+	loop *frame.Loop
 	// running is used to check if the room is running
 	// and to prevent multiple calls to Run()
 	running bool
@@ -38,16 +40,20 @@ type Room struct {
 	data any
 }
 
-func NewRoom(processor RoomProcessor, msgProcessor MessageProcessor, opt *RoomConf) *Room {
+func NewRoom(processor RoomProcessor, opt *RoomConf) *Room {
+	loopConf := frame.LoopConf{
+		Frequency:          uint(opt.frequency),
+		HeartbeatFrequency: uint(opt.heartbeatFrequency),
+		LoopType:           opt.loopType,
+		MaxQueueSize:       uint(opt.maxBufferSize),
+	}
 	room := &Room{
 		opt:       opt,
-		loop:      NewLoop(msgProcessor, opt),
+		loop:      frame.NewLoop(loopConf),
 		processor: processor,
 		players:   make(map[string]struct{}),
 	}
 
-	// Set the stop callback
-	room.loop.stopCallback(room.stop)
 	return room
 }
 
@@ -72,14 +78,14 @@ func (r *Room) Data() any {
 
 // Message is used to send messages to the room
 // and receive messages from the room
-func (r *Room) WriteMessage(msg Message) error {
+func (r *Room) WriteMessage(msg frame.Message) error {
 	if !r.running {
 		// if the room is not running, drop the message
 		// and return an error
 		return ErrNotRunning
 	}
 
-	return r.loop.Push(msg)
+	return r.loop.Receive(msg)
 }
 
 // Join is used to add a player to the room
@@ -140,7 +146,9 @@ func (r *Room) Start() error {
 	r.mu.Unlock()
 
 	// Start the loop without holding the lock
-	return r.loop.Start()
+	r.loop.Start()
+
+	return nil
 }
 
 // stop the room loop and release resources
@@ -166,9 +174,6 @@ func (r *Room) Stop() {
 	if !status {
 		return
 	}
-
-	// Remove the stop callback.
-	r.loop.stopCallback(nil)
 
 	// Stop the loop synchronously to ensure proper cleanup.
 	r.loop.Stop()

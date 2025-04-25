@@ -29,10 +29,11 @@ type (
 		// max player count
 		maxPlayer int
 		// frequency of game logic frame processing
-		frequency time.Duration
-		// timeout for game logic frame processing
-		timeout            time.Duration
+		frequency          time.Duration
 		heartbeatFrequency time.Duration
+		// loop type
+		// 0: normal loop, 1: sync loop
+		loopType string
 	}
 
 	// OptionFunc defines the method to customize a Option.
@@ -50,7 +51,6 @@ func NewOption(opts ...IOption) *RoomConf {
 	opt := &RoomConf{
 		roomID:             defaultRoomID,
 		frequency:          frequency,
-		timeout:            timeout,
 		maxBufferSize:      defaultMaxBufferSize,
 		maxPlayer:          defaultMaxPlayer,
 		heartbeatFrequency: defaultHeartbeatFrequency,
@@ -74,12 +74,6 @@ func WithFrequency(frequency time.Duration) OptionFunc {
 	}
 }
 
-func WithTimeout(timeout time.Duration) OptionFunc {
-	return func(o *RoomConf) {
-		o.timeout = timeout
-	}
-}
-
 func WithMaxPlayer(maxPlayer int) OptionFunc {
 	return func(o *RoomConf) {
 		o.maxPlayer = maxPlayer
@@ -95,5 +89,11 @@ func WithMaxBufferSize(maxBufferSize uint64) OptionFunc {
 func WithHeartbeat(heartbeat time.Duration) OptionFunc {
 	return func(o *RoomConf) {
 		o.heartbeatFrequency = heartbeat
+	}
+}
+
+func WithLoopType(loopType string) OptionFunc {
+	return func(o *RoomConf) {
+		o.loopType = loopType
 	}
 }
