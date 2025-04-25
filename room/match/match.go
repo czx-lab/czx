@@ -1,6 +1,7 @@
 package match
 
 import (
+	"container/list"
 	"errors"
 	"sync"
 )
@@ -11,12 +12,13 @@ var (
 	ErrMaxQueuePlayer = errors.New("max queue player")
 	ErrAlreadyMatch   = errors.New("macth is already waiting")
 	// Global queue shared by all Match instances.
-	localQueue chan uint64
+	localQueue *list.List
+	queueMutex sync.RWMutex
 )
 
 // Initialize the global queue with a default size.
 func init() {
-	localQueue = make(chan uint64, defaultQueueSize)
+	localQueue = list.New()
 }
 
 type (
@@ -75,13 +77,23 @@ func (mc *Match) StartMatching(matchID string, num uint, fn MatchHandler) ([]uin
 
 // Enqueue adds a player to the queue of the specified matchID.
 func (mc *Match) Enqueue(playerID uint64) error {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
+	return mc.push(playerID, false) // Add to the back of the queue.
+}
 
-	// Check if the global queue is full before adding a player.
-	if len(localQueue) >= cap(localQueue) {
+// EnqueueFront adds a player to the front of the queue.
+func (mc *Match) EnqueueFront(playerID uint64) error {
+	return mc.push(playerID, true)
+}
+
+// push adds a player to the queue, either at the front or the back.
+func (mc *Match) push(playerID uint64, toFront bool) error {
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
+
+	// Check if the queue is full
+	if localQueue.Len() >= defaultQueueSize {
 		if mc.processor == nil {
-			return ErrMaxQueuePlayer // Return error if the queue is full and no processor is available.
+			return ErrMaxQueuePlayer
 		}
 
 		if err := mc.processor.Enqueue(playerID); err != nil {
@@ -90,33 +102,46 @@ func (mc *Match) Enqueue(playerID uint64) error {
 		return nil
 	}
 
-	localQueue <- playerID
+	// Add to the front or back of the queue
+	if toFront {
+		localQueue.PushFront(playerID)
+	} else {
+		localQueue.PushBack(playerID)
+	}
+
 	return nil
 }
 
 // Dequeue removes a player from the queue and returns their ID.
 // It also ensures that the provided MatchHandler function is called and its result is respected.
 func (mc *Match) dequeue(fn MatchHandler) (uint64, bool) {
-	var playerID uint64
-	var err error
+	queueMutex.Lock()
+	defer queueMutex.Unlock()
 
-	select {
-	case playerID = <-localQueue:
-	default:
+	var playerID uint64
+
+	// Check if the queue is empty
+	if localQueue.Len() == 0 {
 		if mc.processor == nil {
-			return 0, false // Return false if the channel is empty.
+			return 0, false
 		}
 
+		var err error
 		playerID, err = mc.processor.Dequeue()
 		if err != nil {
 			return 0, false
 		}
+	} else {
+		// Remove from the front of the queue
+		element := localQueue.Front()
+		playerID = element.Value.(uint64)
+		localQueue.Remove(element)
 	}
 
-	// Ensure fn is called and its result is respected.
+	// Ensure fn is called and its result is respected
 	if fn != nil && !fn(playerID) {
-		// Attempt to re-enqueue the player if fn returns false.
-		if err := mc.Enqueue(playerID); err != nil {
+		// Attempt to re-enqueue the player if fn returns false
+		if err := mc.push(playerID, false); err != nil {
 			return 0, false
 		}
 		return 0, false
@@ -127,8 +152,8 @@ func (mc *Match) dequeue(fn MatchHandler) (uint64, bool) {
 
 // QueueSize returns the current size of the queue.
 func (mc *Match) QueueSize() int {
-	mc.mu.RLock()
-	defer mc.mu.RUnlock()
+	queueMutex.RLock()
+	defer queueMutex.RUnlock()
 
-	return len(localQueue)
+	return localQueue.Len()
 }
