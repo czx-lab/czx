@@ -24,17 +24,32 @@ func (r *roomprocessor) Leave(playerID string) error {
 
 var _ RoomProcessor = (*roomprocessor)(nil)
 
+type normalProcessorMock struct{}
+
+// Close implements NormalProcessor.
+func (n *normalProcessorMock) Close() {
+	fmt.Println("normalProcessorMock closed")
+}
+
+// HandleIdle implements NormalProcessor.
+func (n *normalProcessorMock) HandleIdle() {
+	fmt.Println("normalProcessorMock handle idle")
+
+}
+
+// Process implements NormalProcessor.
+func (n *normalProcessorMock) Process(message frame.Message) {
+	fmt.Printf("normalProcessorMock process message: %+v\n", message)
+}
+
+var _ frame.NormalProcessor = (*normalProcessorMock)(nil)
+
 func TestRoom(t *testing.T) {
 	t.Run("room test", func(t *testing.T) {
-		opt := NewOption(
-			WithRoomID("1"),
-			WithMaxPlayer(5),
-			WithMaxBufferSize(4096),
-			WithFrequency(30*time.Millisecond),
-			// WithTimeout(10*time.Second),
-			WithHeartbeat(3*time.Second),
-		)
-		room := NewRoom(&roomprocessor{}, opt)
+		room := NewRoom(&roomprocessor{}, RoomConf{})
+		loop := frame.NewLoop(frame.LoopConf{})
+		loop.WithNormalProc(&normalProcessorMock{})
+		room.WithLoop(loop)
 		if room.ID() != "1" {
 			t.Errorf("expected room id 1, got %v", room.ID())
 		}
@@ -67,34 +82,30 @@ func TestRoom(t *testing.T) {
 				if err := room.Leave("10"); err != nil {
 					t.Errorf("leave player 10 err %v", err)
 				}
+
+				room.Stop()
 			})
 		})
-		<-(chan any)(nil)
+
+		for {
+		}
 	})
 }
 
 func TestRoomManager(t *testing.T) {
 	t.Run("room manager test", func(t *testing.T) {
 		rm := NewRoomManager()
+		room := NewRoom(&roomprocessor{}, RoomConf{
+			RoomID: "2",
+		})
 
-		opt := NewOption(
-			WithRoomID("1"),
-			WithMaxPlayer(5),
-			WithMaxBufferSize(4096),
-			WithFrequency(30*time.Millisecond),
-			// WithTimeout(10*time.Second),
-			WithHeartbeat(3*time.Second),
-		)
-		opt1 := NewOption(
-			WithRoomID("2"),
-			WithMaxPlayer(5),
-			WithMaxBufferSize(4096),
-			WithFrequency(30*time.Millisecond),
-			// WithTimeout(10*time.Second),
-			WithHeartbeat(3*time.Second),
-		)
-		room := NewRoom(&roomprocessor{}, opt)
-		room1 := NewRoom(&roomprocessor{}, opt1)
+		loop := frame.NewLoop(frame.LoopConf{})
+		loop.WithNormalProc(&normalProcessorMock{})
+		room.WithLoop(loop)
+
+		room1 := NewRoom(&roomprocessor{}, RoomConf{
+			RoomID: "3",
+		})
 
 		if err := rm.Add(room); err != nil {
 			t.Errorf("add room err %v", err)
@@ -105,16 +116,21 @@ func TestRoomManager(t *testing.T) {
 
 		fmt.Println(111111)
 
-		room.WriteMessage(frame.Message{
+		time.Sleep(2 * time.Second)
+		if err := room.WriteMessage(frame.Message{
 			PlayerID: "2",
 			Data:     []byte{'m', 'e', '2'},
-		})
+		}); err != nil {
+			t.Fatalf("write message err %v", err)
+		}
 
 		room.Join("10")
 		room.Join("11")
 		room.Join("12")
 
 		room.Leave("10")
+		time.Sleep(100 * time.Second)
+		fmt.Println("222222")
 		rm.Remove("2")
 
 		time.Sleep(10 * time.Second)

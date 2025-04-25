@@ -8,48 +8,54 @@ import (
 )
 
 var (
-	ErrRoomFull   = errors.New("room is full")
-	ErrMaxPlayer  = errors.New("max player count exceeded")
-	ErrBufferFull = errors.New("buffer is full")
-	ErrNotRunning = errors.New("room is not running")
-	ErrRunning    = errors.New("room is already running")
+	ErrRoomFull     = errors.New("room is full")
+	ErrMaxPlayer    = errors.New("max player count exceeded")
+	ErrBufferFull   = errors.New("buffer is full")
+	ErrNotRunning   = errors.New("room is not running")
+	ErrRunning      = errors.New("room is already running")
+	ErrLoopNotFound = errors.New("loop not found")
 )
 
-type Room struct {
-	opt *RoomConf
+const (
+	// default room id
+	defaultRoomID = "1"
+	// default max player count
+	defaultMaxPlayer = 5
+)
 
-	// mu is used to protect the room state and the loop
-	mu sync.RWMutex
-	// loop is used to run the room loop
-	// and send messages to Kafka
-	// and receive messages from Kafka
-	loop *frame.Loop
-	// running is used to check if the room is running
-	// and to prevent multiple calls to Run()
-	running bool
-
-	// players is used to keep track of the players in the room
-	// and to prevent multiple calls to Join()
-	players map[string]struct{}
-
-	// rpcClient is used to send messages to the room
-	// and receive messages from the room
-	processor RoomProcessor
-
-	// data is used to store the room data
-	data any
-}
-
-func NewRoom(processor RoomProcessor, opt *RoomConf) *Room {
-	loopConf := frame.LoopConf{
-		Frequency:          uint(opt.frequency),
-		HeartbeatFrequency: uint(opt.heartbeatFrequency),
-		LoopType:           opt.loopType,
-		MaxQueueSize:       uint(opt.maxBufferSize),
+type (
+	RoomConf struct {
+		// max player count
+		MaxPlayer int
+		RoomID    string // room id
 	}
+	Room struct {
+		opt RoomConf
+		// mu is used to protect the room state and the loop
+		mu sync.RWMutex
+		// loop is used to run the room loop
+		// and send messages to Kafka
+		// and receive messages from Kafka
+		loop *frame.Loop
+		// running is used to check if the room is running
+		// and to prevent multiple calls to Run()
+		running bool
+		// players is used to keep track of the players in the room
+		// and to prevent multiple calls to Join()
+		players map[string]struct{}
+		// rpcClient is used to send messages to the room
+		// and receive messages from the room
+		processor RoomProcessor
+		// data is used to store the room data
+		data any
+	}
+)
+
+func NewRoom(processor RoomProcessor, opt RoomConf) *Room {
+	defaultConf(&opt)
+
 	room := &Room{
 		opt:       opt,
-		loop:      frame.NewLoop(loopConf),
 		processor: processor,
 		players:   make(map[string]struct{}),
 	}
@@ -57,8 +63,19 @@ func NewRoom(processor RoomProcessor, opt *RoomConf) *Room {
 	return room
 }
 
+// WithLoop is used to set the room loop
+func (r *Room) WithLoop(loop *frame.Loop) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.loop != nil {
+		r.loop.Stop()
+	}
+	r.loop = loop
+}
+
 func (r *Room) ID() string {
-	return r.opt.roomID
+	return r.opt.RoomID
 }
 
 // WithData is used to set the room data
@@ -85,6 +102,9 @@ func (r *Room) WriteMessage(msg frame.Message) error {
 		return ErrNotRunning
 	}
 
+	if r.loop == nil {
+		return ErrLoopNotFound
+	}
 	return r.loop.Receive(msg)
 }
 
@@ -97,7 +117,7 @@ func (r *Room) Join(playerID string) error {
 	if _, ok := r.players[playerID]; ok {
 		return ErrMaxPlayer
 	}
-	if len(r.players) >= r.opt.maxPlayer {
+	if len(r.players) >= r.opt.MaxPlayer {
 		return ErrRoomFull
 	}
 
@@ -146,7 +166,9 @@ func (r *Room) Start() error {
 	r.mu.Unlock()
 
 	// Start the loop without holding the lock
-	r.loop.Start()
+	if r.loop != nil {
+		r.loop.Start()
+	}
 
 	return nil
 }
@@ -176,7 +198,9 @@ func (r *Room) Stop() {
 	}
 
 	// Stop the loop synchronously to ensure proper cleanup.
-	r.loop.Stop()
+	if r.loop != nil {
+		r.loop.Stop()
+	}
 }
 
 // Number of players in the room
@@ -213,4 +237,13 @@ func (r *Room) Players() []string {
 	}
 
 	return players
+}
+
+func defaultConf(conf *RoomConf) {
+	if conf.MaxPlayer == 0 {
+		conf.MaxPlayer = defaultMaxPlayer
+	}
+	if len(conf.RoomID) == 0 {
+		conf.RoomID = defaultRoomID
+	}
 }

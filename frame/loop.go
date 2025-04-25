@@ -32,7 +32,9 @@ type (
 	Loop struct {
 		mu   sync.Mutex
 		quit chan struct{}
-		conf LoopConf
+		// Channel for adjusting the frequency dynamically
+		adjust chan struct{} // Channel for adjusting the frequency dynamically
+		conf   LoopConf
 		// Processor interface for processing game logic
 		frameProc  FrameProcessor
 		normalProc NormalProcessor
@@ -42,7 +44,6 @@ type (
 		inFrameQueue map[string][]Message
 		// Channel for normal processing
 		inNormalQueue chan Message
-		tune          bool // Flag to indicate if the frequency needs to be adjusted
 		// Handler for empty processing
 		emptyHandler func()
 	}
@@ -54,18 +55,25 @@ func NewLoop(conf LoopConf) *Loop {
 	return &Loop{
 		conf:          conf,
 		quit:          make(chan struct{}),
+		adjust:        make(chan struct{}, 1), // Add buffer to avoid blocking
 		inFrameQueue:  make(map[string][]Message),
 		inNormalQueue: make(chan Message, conf.MaxQueueSize),
 	}
 }
 
 func (l *Loop) WithEmptyHandler(handler func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	l.emptyHandler = handler
 }
 
 // WithNormalProc sets the normal processor for the loop.
 // It can only be set for normal loop type.
 func (l *Loop) WithNormalProc(normalProc NormalProcessor) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if l.conf.LoopType != LoopTypeNormal {
 		return errors.New("normal processor can only be set for normal loop type")
 	}
@@ -77,6 +85,9 @@ func (l *Loop) WithNormalProc(normalProc NormalProcessor) error {
 // WithFrameProc sets the frame processor for the loop.
 // It can only be set for sync loop type.
 func (l *Loop) WithFrameProc(frameProc FrameProcessor) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if l.conf.LoopType != LoopTypeSync {
 		return errors.New("frame processor can only be set for sync loop type")
 	}
@@ -138,22 +149,14 @@ func (l *Loop) monitorFrequency(ticker *time.Ticker) {
 		select {
 		case <-l.quit:
 			return
-		default:
+		case <-l.adjust:
 			l.mu.Lock()
-			if !l.tune {
-				l.mu.Unlock()
-				continue
-			}
-
-			l.tune = false
 			frequency := time.Second / time.Duration(l.conf.Frequency)
 			ticker.Reset(frequency)
 
 			xlog.Write().Sugar().Debugf("Frequency adjusted to %d Hz", l.conf.Frequency)
 
 			l.mu.Unlock()
-
-			time.Sleep(100 * time.Millisecond) // Avoid busy-waiting
 		}
 	}
 }
@@ -253,9 +256,13 @@ func (l *Loop) Stop() {
 
 	select {
 	case <-l.quit:
+		// Already stopped
 	default:
-		close(l.quit)
+		close(l.quit) // Signal all goroutines to stop
 	}
+
+	// Note: No need to close the `adjust` channel.
+	// It is only used for signaling and will be garbage collected when `Loop` is no longer referenced.
 }
 
 // Receive receives a message and adds it to the input queue for processing.
@@ -295,7 +302,14 @@ func (l *Loop) Frequency(frequency uint) error {
 	xlog.Write().Sugar().Debugf("Updating frequency from %d to %d", l.conf.Frequency, frequency)
 
 	l.conf.Frequency = frequency
-	l.tune = true
+
+	// Non-blocking send to adjust channel
+	select {
+	case l.adjust <- struct{}{}:
+	default:
+		// If the channel is full, skip sending to avoid blocking
+		xlog.Write().Sugar().Warn("Frequency adjustment signal already pending")
+	}
 
 	return nil
 }
