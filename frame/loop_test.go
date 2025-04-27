@@ -49,7 +49,7 @@ var _ FrameProcessor = (*frameProcessorMock)(nil)
 func TestLoop(t *testing.T) {
 	t.Run("TestNormalLoop", func(t *testing.T) {
 		// Create a new loop with default configuration
-		loop := NewLoop(LoopConf{
+		loop, _ := NewLoop(LoopConf{
 			Frequency:          60,
 			HeartbeatFrequency: 5,
 			LoopType:           LoopTypeNormal,
@@ -57,9 +57,9 @@ func TestLoop(t *testing.T) {
 		if err := loop.WithNormalProc(&normalProcessorMock{}); err != nil {
 			t.Fatalf("Failed to set normal processor: %v", err)
 		}
-		loop.WithEmptyHandler(func() {
-			fmt.Println("Empty handler called")
-		})
+		// loop.WithEmptyHandler(func() {
+		// 	fmt.Println("Empty handler called")
+		// })
 
 		// Start the loop
 		go loop.Start()
@@ -81,7 +81,7 @@ func TestLoop(t *testing.T) {
 
 	t.Run("TestSyncLoop", func(t *testing.T) {
 		// Create a new loop with default configuration
-		loop := NewLoop(LoopConf{
+		loop, _ := NewLoop(LoopConf{
 			Frequency:          60,
 			HeartbeatFrequency: 5,
 			LoopType:           LoopTypeSync,

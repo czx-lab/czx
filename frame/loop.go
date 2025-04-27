@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/xlog"
+	"github.com/panjf2000/ants/v2"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 	frequency          uint = 30
 	maxQueueSize       uint = 100 // Maximum input queue size per player
 	heartbeatFrequency uint = 5   // Heartbeat frequency in seconds
+	poolSize           int  = 20  // Size of the worker pool
 
 	// LoopTypeNormal indicates a normal game loop
 	LoopTypeNormal = "normal"
@@ -28,6 +30,7 @@ type (
 		HeartbeatFrequency uint
 		MaxQueueSize       uint
 		LoopType           string // Type of loop, e.g., "normal" or "sync"
+		PoolSize           int    // Size of the worker pool
 	}
 	Loop struct {
 		mu   sync.Mutex
@@ -46,11 +49,22 @@ type (
 		inNormalQueue chan Message
 		// Handler for empty processing
 		emptyHandler func()
+		workpool     *ants.Pool
 	}
 )
 
-func NewLoop(conf LoopConf) *Loop {
+func NewLoop(conf LoopConf) (*Loop, error) {
 	defaultConf(&conf)
+
+	opts := []ants.Option{
+		ants.WithNonblocking(true),
+		ants.WithPreAlloc(true),
+		ants.WithDisablePurge(true),
+	}
+	workerpool, err := ants.NewPool(conf.PoolSize, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create worker pool: %w", err)
+	}
 
 	return &Loop{
 		conf:          conf,
@@ -58,7 +72,8 @@ func NewLoop(conf LoopConf) *Loop {
 		adjust:        make(chan struct{}, 1), // Add buffer to avoid blocking
 		inFrameQueue:  make(map[string][]Message),
 		inNormalQueue: make(chan Message, conf.MaxQueueSize),
-	}
+		workpool:      workerpool,
+	}, nil
 }
 
 func (l *Loop) WithEmptyHandler(handler func()) {
@@ -166,7 +181,7 @@ func (l *Loop) monitorFrequency(ticker *time.Ticker) {
 func (l *Loop) processNormal() {
 	select {
 	case message := <-l.inNormalQueue:
-		func() {
+		l.workpool.Submit(func() {
 			defer func() {
 				if r := recover(); r != nil {
 					xlog.Write().Sugar().Errorf("Recovered from panic in processor: %v", r)
@@ -174,7 +189,7 @@ func (l *Loop) processNormal() {
 			}()
 
 			l.normalProc.Process(message)
-		}()
+		})
 	default:
 		if l.emptyHandler != nil {
 			l.emptyHandler()
@@ -185,47 +200,49 @@ func (l *Loop) processNormal() {
 // process processes the current frame and its inputs, and prepares the next frame.
 // It handles the input queue for each player and updates the current frame accordingly.
 func (l *Loop) processFrame() {
-	hasIn := len(l.inFrameQueue) > 0
-
-	if !hasIn {
+	if len(l.inFrameQueue) == 0 {
 		if l.emptyHandler != nil {
+			// Call the empty handler if there are no messages to process
 			l.emptyHandler()
 		}
 		return
 	}
 
-	// Process the current frame and its inputs
-	for playerID, messages := range l.inFrameQueue {
-		if len(messages) > 0 {
-			// Safely process the first message and update the queue
-			if l.current.Inputs == nil {
-				l.current.Inputs = make(map[string]Message)
-			}
-
-			l.current.Inputs[playerID] = messages[0]
-			l.inFrameQueue[playerID] = messages[1:]
-		} else {
-			// Ensure the player's input map is cleared if no messages are left
-			delete(l.current.Inputs, playerID)
-		}
-	}
-
-	// Process the current frame using the processor
-	func() {
+	l.workpool.Submit(func() {
 		defer func() {
 			if r := recover(); r != nil {
 				xlog.Write().Sugar().Errorf("Recovered from panic in processor: %v", r)
 			}
 		}()
 
-		l.frameProc.Process(l.current)
-	}()
+		// Process the current frame and its inputs
+		for playerID, messages := range l.inFrameQueue {
+			if len(messages) > 0 {
+				// Safely process the first message and update the queue
+				if l.current.Inputs == nil {
+					l.current.Inputs = make(map[string]Message)
+				}
 
-	// Prepare the next frame
-	l.current = Frame{
-		FrameID: l.current.FrameID + 1,
-		Inputs:  make(map[string]Message),
-	}
+				l.current.Inputs[playerID] = messages[0]
+				l.inFrameQueue[playerID] = messages[1:]
+			} else {
+				// Ensure the player's input map is cleared if no messages are left
+				delete(l.current.Inputs, playerID)
+			}
+
+			// If the queue is empty, remove the player from the inFrameQueue
+			delete(l.inFrameQueue, playerID)
+		}
+
+		// Process the current frame using the processor
+		l.frameProc.Process(l.current)
+
+		// Prepare the next frame
+		l.current = Frame{
+			FrameID: l.current.FrameID + 1,
+			Inputs:  make(map[string]Message),
+		}
+	})
 }
 
 // Handle heartbeat if the interval has passed
@@ -260,6 +277,12 @@ func (l *Loop) Stop() {
 	default:
 		close(l.quit) // Signal all goroutines to stop
 	}
+
+	// Wait for all tasks to finish
+	l.workpool.Waiting()
+
+	// Release the worker pool
+	l.workpool.Release()
 
 	// Note: No need to close the `adjust` channel.
 	// It is only used for signaling and will be garbage collected when `Loop` is no longer referenced.
@@ -326,5 +349,8 @@ func defaultConf(conf *LoopConf) {
 	}
 	if conf.HeartbeatFrequency == 0 {
 		conf.HeartbeatFrequency = heartbeatFrequency
+	}
+	if conf.PoolSize == 0 {
+		conf.PoolSize = poolSize
 	}
 }
