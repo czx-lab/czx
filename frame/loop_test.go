@@ -102,6 +102,17 @@ func TestLoop(t *testing.T) {
 			})
 		}
 
+		time.Sleep(40 * time.Millisecond)
+
+		// Simulate sending messages to the loop
+		for i := range 10 {
+			loop.Receive(Message{
+				PlayerID:  fmt.Sprintf("Player_next%d", i),
+				Data:      []byte(fmt.Sprintf("Input next from Player%d", i%3)),
+				Timestamp: time.Now(),
+			})
+		}
+
 		time.Sleep(20 * time.Second)
 
 		// Stop the loop after some time

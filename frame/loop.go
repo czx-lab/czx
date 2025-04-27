@@ -50,6 +50,7 @@ type (
 		// Handler for empty processing
 		emptyHandler func()
 		workpool     *ants.Pool
+		queue        *Queue[Frame] // Queue for storing frames
 	}
 )
 
@@ -73,6 +74,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		inFrameQueue:  make(map[string][]Message),
 		inNormalQueue: make(chan Message, conf.MaxQueueSize),
 		workpool:      workerpool,
+		queue:         NewQueue[Frame](0),
 	}, nil
 }
 
@@ -212,6 +214,32 @@ func (l *Loop) processFrame() {
 		return
 	}
 
+	// Create a new frame for processing
+	// Increment the frame ID for the next frame
+	frame := Frame{
+		FrameID: l.current.FrameID + 1,
+		Inputs:  make(map[string]Message),
+	}
+
+	// Process the current frame and its inputs
+	for playerID, messages := range l.inFrameQueue {
+		if len(messages) > 0 {
+			frame.Inputs[playerID] = messages[0]
+			l.inFrameQueue[playerID] = messages[1:]
+		} else {
+			// Ensure the player's input map is cleared if no messages are left
+			delete(l.current.Inputs, playerID)
+		}
+
+		// If the queue is empty, remove the player from the inFrameQueue
+		delete(l.inFrameQueue, playerID)
+	}
+
+	// Push the current frame to the queue
+	l.queue.Push(frame)
+
+	l.current = frame // Update the current frame
+
 	l.workpool.Submit(func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -219,32 +247,8 @@ func (l *Loop) processFrame() {
 			}
 		}()
 
-		// Process the current frame and its inputs
-		for playerID, messages := range l.inFrameQueue {
-			if len(messages) > 0 {
-				// Safely process the first message and update the queue
-				if l.current.Inputs == nil {
-					l.current.Inputs = make(map[string]Message)
-				}
-
-				l.current.Inputs[playerID] = messages[0]
-				l.inFrameQueue[playerID] = messages[1:]
-			} else {
-				// Ensure the player's input map is cleared if no messages are left
-				delete(l.current.Inputs, playerID)
-			}
-
-			// If the queue is empty, remove the player from the inFrameQueue
-			delete(l.inFrameQueue, playerID)
-		}
-
-		// Process the current frame using the processor
-		l.frameProc.Process(l.current)
-
-		// Prepare the next frame
-		l.current = Frame{
-			FrameID: l.current.FrameID + 1,
-			Inputs:  make(map[string]Message),
+		if nextFrame, ok := l.queue.Pop(); ok {
+			l.frameProc.Process(nextFrame)
 		}
 	})
 }
