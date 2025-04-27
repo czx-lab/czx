@@ -119,3 +119,75 @@ func TestLoop(t *testing.T) {
 		loop.Stop()
 	})
 }
+
+func TestMessage(t *testing.T) {
+	// Create a new message
+	message := Message{
+		PlayerID:  "Player1",
+		Data:      []byte("Input data"),
+		Timestamp: time.Now(),
+	}
+
+	// Serialize the message
+	data, err := message.Serialize()
+	if err != nil {
+		t.Fatalf("Failed to serialize message: %v", err)
+	}
+
+	// Deserialize the message
+	var deserializedMessage Message
+	if err := deserializedMessage.Deserialize(data); err != nil {
+		t.Fatalf("Failed to deserialize message: %v", err)
+	}
+
+	// Check if the original and deserialized messages are equal
+	if message.PlayerID != deserializedMessage.PlayerID || string(message.Data) != string(deserializedMessage.Data) {
+		t.Errorf("Original and deserialized messages are not equal: %+v vs %+v", message, deserializedMessage)
+	}
+}
+
+func TestFrame(t *testing.T) {
+	// Create a new frame
+	frame := Frame{
+		FrameID: 1,
+		Inputs: map[string]Message{
+			"Player1": {
+				PlayerID:  "Player1",
+				Data:      []byte("Input data"),
+				Timestamp: time.Now(),
+			},
+			"Player2": {
+				PlayerID:  "Player2",
+				Data:      []byte("Input data"),
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	// Serialize the frame
+	data, err := frame.Serialize()
+	if err != nil {
+		t.Fatalf("Failed to serialize frame: %v", err)
+	}
+
+	// Deserialize the frame
+	var deserializedFrame Frame
+	if err := deserializedFrame.Deserialize(data); err != nil {
+		t.Fatalf("Failed to deserialize frame: %v", err)
+	}
+
+	// Check if the original and deserialized frames are equal
+	if frame.FrameID != deserializedFrame.FrameID || len(frame.Inputs) != len(deserializedFrame.Inputs) {
+		t.Errorf("Original and deserialized frames are not equal: %+v vs %+v", frame, deserializedFrame)
+	}
+	for playerID, message := range frame.Inputs {
+		deserializedMessage, ok := deserializedFrame.Inputs[playerID]
+		if !ok || message.PlayerID != deserializedMessage.PlayerID || string(message.Data) != string(deserializedMessage.Data) {
+			t.Errorf("Original and deserialized messages are not equal: %+v vs %+v", message, deserializedMessage)
+		}
+	}
+	// Check if the original and deserialized frames are equal
+	if frame.FrameID != deserializedFrame.FrameID || len(frame.Inputs) != len(deserializedFrame.Inputs) {
+		t.Errorf("Original and deserialized frames are not equal: %+v vs %+v", frame, deserializedFrame)
+	}
+}
