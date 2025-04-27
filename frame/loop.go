@@ -115,6 +115,10 @@ func (l *Loop) WithFrameProc(frameProc FrameProcessor) error {
 // Start starts the game loop, processing frames at the specified frequency.
 // It uses a ticker to trigger the processing at regular intervals.
 func (l *Loop) Start() {
+	if l.workpool.IsClosed() {
+		l.workpool.Reboot()
+	}
+
 	frequency := time.Second / time.Duration(l.conf.Frequency)
 	ticker := time.NewTicker(frequency)
 	defer ticker.Stop()
