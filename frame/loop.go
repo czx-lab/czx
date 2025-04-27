@@ -262,6 +262,10 @@ func (l *Loop) checkHeartbeat(lastHeartbeat time.Time) time.Time {
 		lastHeartbeat = time.Now() // Update the last heartbeat time
 	}
 
+	if time.Since(lastHeartbeat) >= 2*frequency {
+		xlog.Write().Sugar().Warnf("Heartbeat timeout detected! Last heartbeat was %v ago", time.Since(lastHeartbeat))
+	}
+
 	return lastHeartbeat
 }
 
