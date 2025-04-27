@@ -51,13 +51,12 @@ type (
 	}
 )
 
-func NewRoom(processor RoomProcessor, opt RoomConf) *Room {
+func NewRoom(opt RoomConf) *Room {
 	defaultConf(&opt)
 
 	room := &Room{
-		opt:       opt,
-		processor: processor,
-		players:   make(map[string]struct{}),
+		opt:     opt,
+		players: make(map[string]struct{}),
 	}
 
 	return room
@@ -72,6 +71,15 @@ func (r *Room) WithLoop(loop *frame.Loop) {
 		r.loop.Stop()
 	}
 	r.loop = loop
+}
+
+// WithProcessor is used to set the room processor
+// and to prevent multiple calls to WithProcessor()
+func (r *Room) WithProcessor(proc RoomProcessor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.processor = proc
 }
 
 func (r *Room) ID() string {
@@ -123,6 +131,10 @@ func (r *Room) Join(playerID string) error {
 
 	r.players[playerID] = struct{}{}
 
+	if r.processor == nil {
+		return nil
+	}
+
 	if err := r.processor.Join(playerID); err != nil {
 		delete(r.players, playerID)
 		// If the player is already in the room, remove it
@@ -139,6 +151,9 @@ func (r *Room) Leave(playerID string) error {
 	defer r.mu.Unlock()
 
 	delete(r.players, playerID)
+	if r.processor == nil {
+		return nil
+	}
 
 	return r.processor.Leave(playerID)
 }
