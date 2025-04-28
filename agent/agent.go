@@ -167,7 +167,7 @@ func (a *agent) Run() {
 				xlog.Write().Debug("network processor message decoding error", zap.Error(err))
 				break
 			}
-			if err = a.gate.processor.Process(msg); err != nil {
+			if err = a.gate.processor.Process(msg, a); err != nil {
 				xlog.Write().Debug("network message processor error", zap.Error(err))
 				break
 			}
@@ -203,7 +203,7 @@ func (a *agent) React(data []byte) {
 		xlog.Write().Error("network processor message decoding error", zap.Error(err))
 		return
 	}
-	if err = a.gate.processor.Process(msg); err != nil {
+	if err = a.gate.processor.Process(msg, a); err != nil {
 		xlog.Write().Error("network message processor error", zap.Error(err))
 		return
 	}

@@ -17,6 +17,10 @@ type (
 	HelloReply struct {
 		Msg string
 	}
+
+	HelloCopy struct {
+		Name string
+	}
 )
 
 func main() {
@@ -36,9 +40,19 @@ func main() {
 
 	processor.Register(1, &Hello{})
 	processor.Register(2, &HelloReply{})
-	processor.RegisterHandler(&HelloReply{}, func(args []any) {
-		param := args[1].(*Hello)
-		args[0].(network.Agent).WriteWithCode(2, &HelloReply{
+
+	processor.RegisterExceptID(&HelloCopy{})
+
+	processor.RegisterHandler(&HelloCopy{}, func(args []any) {
+		param := args[0].(*HelloCopy)
+		args[1].(network.Agent).WriteWithCode(2, &HelloReply{
+			Msg: fmt.Sprintf("Hello copy %s", param.Name),
+		})
+	})
+
+	processor.RegisterHandler(&Hello{}, func(args []any) {
+		param := args[0].(*Hello)
+		args[1].(network.Agent).WriteWithCode(2, &HelloReply{
 			Msg: fmt.Sprintf("Hello %s", param.Name),
 		})
 	})
@@ -51,7 +65,7 @@ func main() {
 
 	go func() {
 		eventbus.DefaultBus.Subscribe(eventbus.EvtNewAgent, func(message any) {
-			fmt.Println(message.(network.Agent).LocalAddr().String())
+			fmt.Println("LocalAddr = ", message.(network.Agent).LocalAddr().String())
 		})
 	}()
 

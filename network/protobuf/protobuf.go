@@ -77,18 +77,20 @@ func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
 		binary.BigEndian.PutUint16(msgcode, code)
 	}
 
-	return [][]byte{msgs[0], msgcode, msgs[1]}, nil
+	smsgs := [][]byte{msgcode}
+	smsgs = append(smsgs, msgs...)
+	return smsgs, nil
 }
 
 // Process implements network.Processor.
-func (p *Processor) Process(data any) error {
+func (p *Processor) Process(data any, agent network.Agent) error {
 	if raw, ok := data.(Raw); ok {
 		info, ok := p.messages[raw.id]
 		if !ok {
 			return fmt.Errorf("message id %v not registered", raw.id)
 		}
 		if info.rawHandler != nil {
-			info.rawHandler([]any{raw.id, raw.data})
+			info.rawHandler([]any{raw.id, raw.data, agent})
 		}
 		return nil
 	}
@@ -101,7 +103,7 @@ func (p *Processor) Process(data any) error {
 
 	info := p.messages[id]
 	if info.handler != nil {
-		info.handler([]any{data})
+		info.handler([]any{data, agent})
 	}
 
 	return nil

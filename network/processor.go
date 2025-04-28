@@ -12,7 +12,7 @@ type (
 
 	Processor interface {
 		// Process handles the incoming data and returns a response.
-		Process(data any) error
+		Process(data any, agent Agent) error
 		// Unmarshal converts the byte slice to a message.
 		// It returns the message and an error if any.
 		Unmarshal(data []byte) (any, error)

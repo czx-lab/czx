@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/czx-lab/czx/network"
 )
@@ -83,11 +84,13 @@ func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
 		binary.BigEndian.PutUint16(msgcode, code)
 	}
 
-	return [][]byte{msgs[0], msgcode, msgs[1]}, nil
+	smsgs := [][]byte{msgcode}
+	smsgs = append(smsgs, msgs...)
+	return smsgs, nil
 }
 
 // Process implements network.Processor.
-func (p *Processor) Process(data any) error {
+func (p *Processor) Process(data any, agent network.Agent) error {
 	if raw, ok := data.(Raw); ok {
 		rawinfo, ok := p.messages[raw.id]
 		if ok {
@@ -103,7 +106,7 @@ func (p *Processor) Process(data any) error {
 
 	RawHandlerExec:
 		if rawinfo.rawHandler != nil {
-			rawinfo.rawHandler([]any{raw.id, raw.data})
+			rawinfo.rawHandler([]any{raw.id, raw.data, agent})
 		}
 		return nil
 	}
@@ -129,7 +132,7 @@ func (p *Processor) Process(data any) error {
 
 HandlerExec:
 	if info.handler != nil {
-		info.handler([]any{data})
+		info.handler([]any{data, agent})
 	}
 
 	return nil
@@ -246,7 +249,7 @@ WithHandlerExec:
 
 // Unmarshal implements network.Processor.
 func (p *Processor) Unmarshal(data []byte) (any, error) {
-	var m map[any]json.RawMessage
+	var m map[string]json.RawMessage
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
@@ -258,24 +261,20 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 		var info *message
 		var mid uint16
 		var mname string
+		var ok bool
 
-		id, ok := msgid.(uint16)
-		name, nameok := msgid.(string)
-
-		// check if the message is registered by id
-		if ok {
-			info, ok = p.messages[id]
+		// 尝试将 msgid 解析为 uint16 或 string
+		if id, err := strconv.ParseUint(msgid, 10, 16); err == nil {
+			mid = uint16(id)
+			info, ok = p.messages[mid]
 			if !ok {
 				return nil, fmt.Errorf("message %v not registered", msgid)
 			}
 			goto UnmarshalExec
 		}
 
-		if !nameok {
-			return nil, fmt.Errorf("message %v not registered", msgid)
-		}
-
-		info, ok = p.messagesByName[name]
+		mname = msgid
+		info, ok = p.messagesByName[mname]
 		if !ok {
 			return nil, fmt.Errorf("message %v not registered", msgid)
 		}
