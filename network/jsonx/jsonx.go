@@ -57,11 +57,14 @@ func (p *Processor) Marshal(msgs any) ([][]byte, error) {
 	}
 
 	msgname := msgtype.Elem().Name()
-	if _, ok := p.ids[msgname]; ok {
+	if _, ok := p.messagesByName[msgname]; ok {
 		goto MarshalExec
 	}
-	if _, ok := p.messagesByName[msgname]; !ok {
+
+	if id, ok := p.ids[msgname]; !ok {
 		return nil, fmt.Errorf("message %v not registered", msgname)
+	} else {
+		msgname = fmt.Sprintf("%d", id)
 	}
 
 MarshalExec:
