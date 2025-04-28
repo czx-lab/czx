@@ -14,7 +14,6 @@ import (
 	"github.com/czx-lab/czx/network/ws"
 	"github.com/czx-lab/czx/xlog"
 
-	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
@@ -158,33 +157,18 @@ func (a *agent) Run() {
 	for {
 		data, err := a.conn.ReadMessage()
 		if err != nil {
-			if network.IsClosedConnError(err) {
-				xlog.Write().Debug("network closed connection error", zap.Error(err))
-				break
-			}
-
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-				xlog.Write().Debug("network closed connection error", zap.Error(err))
-				break
-			}
-
-			if errors.Is(err, net.ErrClosed) {
-				xlog.Write().Debug("network closed connection error", zap.Error(err))
-				break
-			}
-
-			xlog.Write().Error("network read message error", zap.Error(err))
+			xlog.Write().Debug("network read message error", zap.Error(err))
 			break
 		}
 
 		if a.gate.processor != nil {
 			msg, err := a.gate.processor.Unmarshal(data)
 			if err != nil {
-				xlog.Write().Error("network processor message decoding error", zap.Error(err))
+				xlog.Write().Debug("network processor message decoding error", zap.Error(err))
 				break
 			}
 			if err = a.gate.processor.Process(msg); err != nil {
-				xlog.Write().Error("network message processor error", zap.Error(err))
+				xlog.Write().Debug("network message processor error", zap.Error(err))
 				break
 			}
 		}
