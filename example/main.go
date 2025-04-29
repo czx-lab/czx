@@ -38,21 +38,26 @@ func main() {
 		LittleEndian: false,
 	})
 
-	processor.Register(1, &Hello{})
-	processor.Register(2, &HelloReply{})
-
-	processor.RegisterExceptID(&HelloCopy{})
+	processor.Register(network.Message{
+		Data: &Hello{},
+	})
+	processor.Register(network.Message{
+		Data: &HelloCopy{},
+	})
+	processor.Register(network.Message{
+		Data: &HelloReply{},
+	})
 
 	processor.RegisterHandler(&HelloCopy{}, func(args []any) {
 		param := args[0].(*HelloCopy)
-		args[1].(network.Agent).WriteWithCode(2, &HelloReply{
+		args[1].(network.Agent).WriteWithCode(200, &HelloReply{
 			Msg: fmt.Sprintf("Hello copy %s", param.Name),
 		})
 	})
 
 	processor.RegisterHandler(&Hello{}, func(args []any) {
 		param := args[0].(*Hello)
-		args[1].(network.Agent).WriteWithCode(2, &HelloReply{
+		args[1].(network.Agent).WriteWithCode(200, &HelloReply{
 			Msg: fmt.Sprintf("Hello %s", param.Name),
 		})
 	})

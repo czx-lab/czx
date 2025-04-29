@@ -200,11 +200,11 @@ func (a *agent) React(data []byte) {
 
 	msg, err := a.gate.processor.Unmarshal(data)
 	if err != nil {
-		xlog.Write().Error("network processor message decoding error", zap.Error(err))
+		xlog.Write().Debug("network processor message decoding error", zap.Error(err))
 		return
 	}
 	if err = a.gate.processor.Process(msg, a); err != nil {
-		xlog.Write().Error("network message processor error", zap.Error(err))
+		xlog.Write().Debug("network message processor error", zap.Error(err))
 		return
 	}
 }

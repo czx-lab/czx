@@ -135,25 +135,23 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 }
 
 // Register implements network.Processor.
-func (p *Processor) Register(id uint16, msg any) error {
-	msgtype := reflect.TypeOf(msg)
+func (p *Processor) Register(msg network.Message) error {
+	msgtype := reflect.TypeOf(msg.Data)
 	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
 		return errors.New("protobuf: message must be a pointer")
 	}
-
-	_, ok := p.ids[msgtype]
-	if ok {
+	if _, ok := p.ids[msgtype]; ok {
 		return fmt.Errorf("protobuf: message %v is already registered", msgtype)
 	}
 	if len(p.messages) >= math.MaxUint16 {
 		return fmt.Errorf("too many protobuf messages (max = %v)", math.MaxUint16)
 	}
 
-	p.messages[id] = &message{
+	p.messages[msg.ID] = &message{
 		msgtype: msgtype,
-		id:      id,
+		id:      msg.ID,
 	}
-	p.ids[msgtype] = id
+	p.ids[msgtype] = msg.ID
 	return nil
 }
 
