@@ -88,7 +88,7 @@ func (b *Bezier) Ctrls(args CtrlArgs) (points []Point) {
 		// generate a random point on the bezier curve
 		// based on the previous point
 		points = append(points, Point{
-			X: prev.X*(1-t) + b.conf.ScreenW*t,
+			X: prev.X*(1-t) + b.conf.ScreenW*t*rand.Float64(),
 			Y: prev.Y*(1-t) + b.conf.ScreenH*t*rand.Float64(),
 		})
 	}
