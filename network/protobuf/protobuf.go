@@ -101,7 +101,10 @@ func (p *Processor) Process(data any, agent network.Agent) error {
 		return fmt.Errorf("message %s not registered", msgtype)
 	}
 
-	info := p.messages[id]
+	info, ok := p.messages[id]
+	if !ok {
+		return fmt.Errorf("message id %v not registered", id)
+	}
 	if info.handler != nil {
 		info.handler([]any{data, agent})
 	}

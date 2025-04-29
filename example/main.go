@@ -5,8 +5,9 @@ import (
 
 	"github.com/czx-lab/czx/agent"
 	"github.com/czx-lab/czx/eventbus"
+	"github.com/czx-lab/czx/example/pb"
 	"github.com/czx-lab/czx/network"
-	"github.com/czx-lab/czx/network/jsonx"
+	"github.com/czx-lab/czx/network/protobuf"
 	"github.com/czx-lab/czx/network/ws"
 )
 
@@ -34,30 +35,46 @@ func main() {
 		},
 	}
 
-	processor := jsonx.NewProcessor(network.ProcessorConf{
+	// processor := jsonx.NewProcessor(network.ProcessorConf{
+	// 	LittleEndian: false,
+	// })
+	// processor.Register(network.Message{
+	// 	Data: &Hello{},
+	// })
+	// processor.Register(network.Message{
+	// 	Data: &HelloCopy{},
+	// })
+	// processor.Register(network.Message{
+	// 	Data: &HelloReply{},
+	// })
+	// processor.RegisterHandler(&HelloCopy{}, func(args []any) {
+	// 	param := args[0].(*HelloCopy)
+	// 	args[1].(network.Agent).WriteWithCode(201, &HelloReply{
+	// 		Msg: fmt.Sprintf("Hello copy %s", param.Name),
+	// 	})
+	// })
+
+	// processor.RegisterHandler(&Hello{}, func(args []any) {
+	// 	param := args[0].(*Hello)
+	// 	args[1].(network.Agent).WriteWithCode(201, &HelloReply{
+	// 		Msg: fmt.Sprintf("Hello %s", param.Name),
+	// 	})
+	// })
+
+	processor := protobuf.NewProcessor(network.ProcessorConf{
 		LittleEndian: false,
 	})
-
 	processor.Register(network.Message{
-		Data: &Hello{},
-	})
-	processor.Register(network.Message{
-		Data: &HelloCopy{},
+		ID:   1000,
+		Data: &pb.HelloReq{},
 	})
 	processor.Register(network.Message{
-		Data: &HelloReply{},
+		ID:   1001,
+		Data: &pb.HelloResp{},
 	})
-
-	processor.RegisterHandler(&HelloCopy{}, func(args []any) {
-		param := args[0].(*HelloCopy)
-		args[1].(network.Agent).WriteWithCode(200, &HelloReply{
-			Msg: fmt.Sprintf("Hello copy %s", param.Name),
-		})
-	})
-
-	processor.RegisterHandler(&Hello{}, func(args []any) {
-		param := args[0].(*Hello)
-		args[1].(network.Agent).WriteWithCode(200, &HelloReply{
+	processor.RegisterHandler(&pb.HelloReq{}, func(args []any) {
+		param := args[0].(*pb.HelloReq)
+		args[1].(network.Agent).WriteWithCode(200, &pb.HelloResp{
 			Msg: fmt.Sprintf("Hello %s", param.Name),
 		})
 	})
