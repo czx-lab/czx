@@ -79,11 +79,22 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 	}, nil
 }
 
-func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) {
+func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if proc == nil {
+		return errors.New("empty processor cannot be nil")
+	}
+	if proc.Handler == nil {
+		return errors.New("empty processor handler cannot be nil")
+	}
+	if proc.Frequency <= time.Millisecond {
+		return errors.New("empty processor frequency must be greater than 0")
+	}
 
 	l.eproc = proc
+
+	return nil
 }
 
 // WithNormalProc sets the normal processor for the loop.
