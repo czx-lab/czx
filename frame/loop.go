@@ -32,6 +32,7 @@ type (
 		LoopType           string // Type of loop, e.g., "normal" or "sync"
 		PoolSize           int    // Size of the worker pool
 	}
+
 	Loop struct {
 		mu   sync.Mutex
 		quit chan struct{}
@@ -48,9 +49,9 @@ type (
 		// Channel for normal processing
 		inNormalQueue chan Message
 		// Handler for empty processing
-		emptyHandler func()
-		workpool     *ants.Pool
-		queue        *Queue[Frame] // Queue for storing frames
+		eproc    *EmptyProcessor
+		workpool *ants.Pool
+		queue    *Queue[Frame] // Queue for storing frames
 	}
 )
 
@@ -78,11 +79,11 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 	}, nil
 }
 
-func (l *Loop) WithEmptyHandler(handler func()) {
+func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.emptyHandler = handler
+	l.eproc = proc
 }
 
 // WithNormalProc sets the normal processor for the loop.
@@ -127,6 +128,7 @@ func (l *Loop) Start() {
 
 	go func() {
 		lastHeartbeat := time.Now() // Track the last heartbeat time
+		lastEmptyTime := time.Now() // Track the last empty time
 
 		for {
 			select {
@@ -134,14 +136,20 @@ func (l *Loop) Start() {
 				return
 			case <-ticker.C:
 				l.mu.Lock()
+				var isExecEmpty bool
+
+				if l.eproc != nil && time.Since(lastEmptyTime) >= l.eproc.Frequency {
+					isExecEmpty = true
+					lastEmptyTime = time.Now() // Update the last empty time
+				}
 
 				switch l.conf.LoopType {
 				case LoopTypeNormal:
 					// Process normal messages
-					l.processNormal()
+					l.processNormal(isExecEmpty)
 				case LoopTypeSync:
 					// Process the current frame and its inputs
-					l.processFrame()
+					l.processFrame(isExecEmpty)
 				}
 
 				l.mu.Unlock()
@@ -184,7 +192,7 @@ func (l *Loop) monitorFrequency(ticker *time.Ticker) {
 
 // Process normal messages from the input queue.
 // It handles the processing of messages in the normal loop type.
-func (l *Loop) processNormal() {
+func (l *Loop) processNormal(execEmpty bool) {
 	select {
 	case message := <-l.inNormalQueue:
 		l.workpool.Submit(func() {
@@ -197,19 +205,18 @@ func (l *Loop) processNormal() {
 			l.normalProc.Process(message)
 		})
 	default:
-		if l.emptyHandler != nil {
-			l.emptyHandler()
+		if l.eproc != nil && l.eproc.Handler != nil && execEmpty {
+			l.eproc.Handler()
 		}
 	}
 }
 
 // process processes the current frame and its inputs, and prepares the next frame.
 // It handles the input queue for each player and updates the current frame accordingly.
-func (l *Loop) processFrame() {
+func (l *Loop) processFrame(execEmpty bool) {
 	if len(l.inFrameQueue) == 0 {
-		if l.emptyHandler != nil {
-			// Call the empty handler if there are no messages to process
-			l.emptyHandler()
+		if l.eproc != nil && l.eproc.Handler != nil && execEmpty {
+			l.eproc.Handler()
 		}
 		return
 	}

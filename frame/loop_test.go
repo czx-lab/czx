@@ -57,9 +57,12 @@ func TestLoop(t *testing.T) {
 		if err := loop.WithNormalProc(&normalProcessorMock{}); err != nil {
 			t.Fatalf("Failed to set normal processor: %v", err)
 		}
-		// loop.WithEmptyHandler(func() {
-		// 	fmt.Println("Empty handler called")
-		// })
+		loop.WithEmptyHandler(&EmptyProcessor{
+			Handler: func() {
+				fmt.Println("Empty handler called")
+			},
+			Frequency: 3 * time.Second,
+		})
 
 		// Start the loop
 		go loop.Start()

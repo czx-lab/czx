@@ -1,5 +1,7 @@
 package frame
 
+import "time"
+
 type (
 	Processor interface {
 		// HandleIdle is called when the loop is idle
@@ -15,6 +17,11 @@ type (
 		Processor
 		// Process processes the input frame.
 		Process(frame Frame)
+	}
+	// EmptyProcessor is a processor that does nothing.
+	EmptyProcessor struct {
+		Handler   func()
+		Frequency time.Duration
 	}
 	// NormalProcessor is an interface for processing normal messages.
 	// It is responsible for processing the input message.
