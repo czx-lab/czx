@@ -134,7 +134,7 @@ func (b *Bezier) curve(p []Point) []Point {
 // based on the given points and direction
 func (b *Bezier) Points(points []Point, direction Direction) (pts []Point) {
 	var t float64
-
+	endCtrl := points[len(points)-1]
 	for {
 		point := b.Point(t)
 		pts = append(pts, point)
@@ -143,6 +143,7 @@ func (b *Bezier) Points(points []Point, direction Direction) (pts []Point) {
 		t += b.calculateSpeed(points, point, direction)
 
 		if t >= 1.0 || t <= 0.0 {
+			pts = append(pts, endCtrl)
 			break
 		}
 
