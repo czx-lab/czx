@@ -103,7 +103,7 @@ func (b *Bezier) Ctrls(args CtrlArgs) (points []Point) {
 		points = b.smooth(points, args.Factor)
 	}
 
-	b.curveCtrl(points)
+	b.CurveCtrl(points)
 	return
 }
 
@@ -116,7 +116,7 @@ func (b *Bezier) CurvePoints(points []Point) (pts []Point) {
 
 	b.curveCtrls = make([]curveCtrl, len(points))
 
-	b.curveCtrl(points)
+	b.CurveCtrl(points)
 
 	pts = make([]Point, len(points))
 
@@ -282,7 +282,7 @@ func (b *Bezier) smooth(points []Point, factor float64) (smoothed []Point) {
 	return
 }
 
-func (b *Bezier) curveCtrl(points []Point) {
+func (b *Bezier) CurveCtrl(points []Point) {
 	curve := make([]curveCtrl, len(points))
 
 	for i, p := range points {
