@@ -86,7 +86,7 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	wsconn := NewConn(conn, &WsConnConf{
 		MaxMsgSize:      handler.opt.MaxMsgSize,
-		pendingWriteNum: handler.opt.PendingWriteNum,
+		PendingWriteNum: handler.opt.PendingWriteNum,
 	})
 
 	agent := handler.agent(wsconn)

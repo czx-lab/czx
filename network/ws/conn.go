@@ -23,7 +23,7 @@ type (
 	WsConns    map[*websocket.Conn]struct{}
 	WsConnConf struct {
 		MaxMsgSize      uint32
-		pendingWriteNum int
+		PendingWriteNum int
 	}
 
 	// WsConn represents a WebSocket connection with a mutex for thread-safe access.
@@ -46,7 +46,7 @@ func NewConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
 	wsConn := &WsConn{
 		opt:       opt,
 		conn:      conn,
-		writeChan: make(chan []byte, opt.pendingWriteNum),
+		writeChan: make(chan []byte, opt.PendingWriteNum),
 	}
 
 	go func() {
