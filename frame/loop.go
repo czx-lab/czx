@@ -73,16 +73,24 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		return nil, fmt.Errorf("failed to create worker pool: %w", err)
 	}
 
-	return &Loop{
-		conf:          conf,
-		quit:          make(chan struct{}),
-		adjust:        make(chan struct{}, 1), // Add buffer to avoid blocking
-		inFrameQueue:  make(map[string][]Message),
-		inNormalQueue: make(chan Message, conf.MaxQueueSize),
-		workpool:      workerpool,
-		queue:         NewQueue[Frame](0),
-		delayedFrames: make(map[uint64]Frame),
-	}, nil
+	loop := &Loop{
+		conf:     conf,
+		quit:     make(chan struct{}),
+		adjust:   make(chan struct{}, 1), // Add buffer to avoid blocking
+		workpool: workerpool,
+	}
+	if conf.LoopType == LoopTypeNormal {
+		loop.queue = NewQueue[Frame](0)
+		loop.inNormalQueue = make(chan Message, conf.MaxQueueSize)
+	}
+	if conf.DelayFrames > 0 {
+		loop.delayedFrames = make(map[uint64]Frame)
+	}
+	if conf.LoopType == LoopTypeSync {
+		loop.inFrameQueue = make(map[string][]Message)
+	}
+
+	return loop, nil
 }
 
 func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) error {
