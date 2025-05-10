@@ -55,6 +55,8 @@ type (
 		eproc    *EmptyProcessor
 		workpool *ants.Pool
 		queue    *Queue[Frame] // Queue for storing frames
+		// delayed frames
+		delayedFrames map[uint64]Frame
 	}
 )
 
@@ -79,6 +81,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		inNormalQueue: make(chan Message, conf.MaxQueueSize),
 		workpool:      workerpool,
 		queue:         NewQueue[Frame](0),
+		delayedFrames: make(map[uint64]Frame),
 	}, nil
 }
 
@@ -222,6 +225,32 @@ func (l *Loop) processNormal(execEmpty bool) {
 	}
 }
 
+// delayedFrame checks if the frame is delayed and returns the delayed frame if available.
+// It uses a map to store delayed frames and checks if the current frame is ready for processing.
+func (l *Loop) delayedFrame(frame Frame) *Frame {
+	delayFrameID := frame.FrameID - uint64(l.conf.DelayFrames)
+	if delayFrameID <= 0 {
+		l.delayedFrames[frame.FrameID] = frame
+		return nil
+	} else {
+		// Check if the delayed frame is ready for processing
+		if delayedFrame, ok := l.delayedFrames[delayFrameID]; ok {
+			frame = delayedFrame                  // Use the delayed frame
+			delete(l.delayedFrames, delayFrameID) // Remove the processed frame from the map
+		}
+	}
+
+	// Check if the frame is delayed
+	if _, ok := l.delayedFrames[frame.FrameID]; ok {
+		return nil
+	}
+
+	// Add the frame to the delayed frames map
+	l.delayedFrames[frame.FrameID] = frame
+
+	return &frame
+}
+
 // process processes the current frame and its inputs, and prepares the next frame.
 // It handles the input queue for each player and updates the current frame accordingly.
 func (l *Loop) processFrame(execEmpty bool) {
@@ -242,11 +271,11 @@ func (l *Loop) processFrame(execEmpty bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// Check if the current frame ID is delayed
-	// If the current frame ID is less than or equal to the delay frame ID, skip processing
-	delayFrameID := frame.FrameID - uint64(l.conf.DelayFrames)
-	if delayFrameID <= 0 {
-		return
+	if l.conf.DelayFrames > 0 {
+		delayFrame := l.delayedFrame(frame)
+		if delayFrame != nil {
+			frame = *delayFrame
+		}
 	}
 
 	// Process the current frame and its inputs

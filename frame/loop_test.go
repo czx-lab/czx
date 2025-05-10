@@ -28,6 +28,11 @@ var _ NormalProcessor = (*normalProcessorMock)(nil)
 
 type frameProcessorMock struct{}
 
+// Resend implements FrameProcessor.
+func (f *frameProcessorMock) Resend(playerId string, sequenceID int) {
+	panic("unimplemented")
+}
+
 // Close implements FrameProcessor.
 func (f *frameProcessorMock) Close() {
 	fmt.Println("frameProcessorMock closed")
