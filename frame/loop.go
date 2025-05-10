@@ -34,6 +34,7 @@ type (
 		PoolSize           int    // Size of the worker pool
 		DefaultFill        bool   // Whether to fill the queue with default values
 		DelayFrames        int    // Number of frames to delay processing
+		Resend             bool   // Whether to resend messages if the sequence ID is not as expected
 	}
 
 	Loop struct {
@@ -297,10 +298,12 @@ func (l *Loop) processFrame(execEmpty bool) {
 
 			// Check if the sequence ID is as expected
 			// If not, resend the expected sequence ID to the player
-			expectedSeqID := l.current.Inputs[playerID].SequenceID + 1
-			if messages[0].SequenceID != expectedSeqID {
-				l.frameProc.Resend(playerID, expectedSeqID)
-				continue
+			if l.conf.Resend {
+				expectedSeqID := l.current.Inputs[playerID].SequenceID + 1
+				if messages[0].SequenceID != expectedSeqID {
+					l.frameProc.Resend(playerID, expectedSeqID)
+					continue
+				}
 			}
 
 			frame.Inputs[playerID] = messages[0]
