@@ -3,6 +3,7 @@ package frame
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ type (
 		MaxQueueSize       uint
 		LoopType           string // Type of loop, e.g., "normal" or "sync"
 		PoolSize           int    // Size of the worker pool
+		DefaultFill        bool   // Whether to fill the queue with default values
+		DelayFrames        int    // Number of frames to delay processing
 	}
 
 	Loop struct {
@@ -237,27 +240,57 @@ func (l *Loop) processFrame(execEmpty bool) {
 	}
 
 	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Check if the current frame ID is delayed
+	// If the current frame ID is less than or equal to the delay frame ID, skip processing
+	delayFrameID := frame.FrameID - uint64(l.conf.DelayFrames)
+	if delayFrameID <= 0 {
+		return
+	}
+
 	// Process the current frame and its inputs
 	for playerID, messages := range l.inFrameQueue {
 		if len(messages) > 0 {
+			// Sort messages by timestamp
+			// This ensures that the earliest message is processed first
+			sort.SliceStable(messages, func(i, j int) bool {
+				return messages[i].Timestamp.Unix() < messages[j].Timestamp.Unix()
+			})
+
+			// Check if the sequence ID is as expected
+			// If not, resend the expected sequence ID to the player
+			expectedSeqID := l.current.Inputs[playerID].SequenceID + 1
+			if messages[0].SequenceID != expectedSeqID {
+				l.frameProc.Resend(playerID, expectedSeqID)
+				continue
+			}
+
 			frame.Inputs[playerID] = messages[0]
 			l.inFrameQueue[playerID] = messages[1:]
 		} else {
-			// Ensure the player's input map is cleared if no messages are left
-			delete(l.current.Inputs, playerID)
-		}
+			if !l.conf.DefaultFill {
+				// Ensure the player's input map is cleared if no messages are left
+				delete(l.current.Inputs, playerID)
+				// If the queue is empty, remove the player from the inFrameQueue
+				delete(l.inFrameQueue, playerID)
+				continue
+			}
 
-		// If the queue is empty, remove the player from the inFrameQueue
-		delete(l.inFrameQueue, playerID)
+			// If the queue is empty, fill it with default values
+			frame.Inputs[playerID] = Message{
+				PlayerID:   playerID,
+				SequenceID: l.current.Inputs[playerID].SequenceID + 1,
+				Timestamp:  time.Now(),
+				Data:       nil, // Default fill data
+			}
+		}
 	}
-	l.mu.Unlock()
 
 	// Push the current frame to the queue
 	l.queue.Push(frame)
 
-	l.mu.Lock()
 	l.current = frame // Update the current frame
-	l.mu.Unlock()
 
 	l.workpool.Submit(func() {
 		defer func() {

@@ -8,9 +8,10 @@ import (
 type (
 	// Message represents a single input message from a player.
 	Message struct {
-		PlayerID  string
-		Data      []byte
-		Timestamp time.Time
+		PlayerID   string
+		Data       []byte
+		Timestamp  time.Time
+		SequenceID int // Sequence ID for the message
 	}
 
 	// Frame represents a single frame of game state

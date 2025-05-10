@@ -17,6 +17,9 @@ type (
 		Processor
 		// Process processes the input frame.
 		Process(frame Frame)
+		// Resend re-sends the input message to the player.
+		// It should be called when the input message is not received by the player.
+		Resend(playerId string, sequenceID int)
 	}
 	// EmptyProcessor is a processor that does nothing.
 	EmptyProcessor struct {
