@@ -55,6 +55,7 @@ type (
 		conf         BezierConf
 		curveCtrls   []curveCtrl
 		speedHandler func(curvature float64) float64
+		ctrlHandler  func(t float64, first, end, prev Point) Point
 	}
 )
 
@@ -66,6 +67,12 @@ func New(conf BezierConf) *Bezier {
 // The handler should return the speed based on the curvature of the bezier curve
 func (b *Bezier) WithSpeedHandler(handler func(curvature float64) float64) {
 	b.speedHandler = handler
+}
+
+// WithGenCtrlHandler sets the control point handler for the bezier curve
+// The handler should return the control point based on the t value of the bezier curve
+func (b *Bezier) WithGenCtrlHadler(handler func(t float64, first, end, prev Point) Point) {
+	b.ctrlHandler = handler
 }
 
 // Ctrls generates the control points of the bezier curve
@@ -83,6 +90,10 @@ func (b *Bezier) Ctrls(args CtrlArgs) (points []Point) {
 		var prev Point
 		if i > 0 {
 			prev = points[i-1]
+		}
+		if b.ctrlHandler != nil {
+			points = append(points, b.ctrlHandler(t, args.SepCtrls[0], args.SepCtrls[1], prev))
+			continue
 		}
 
 		// generate a random point on the bezier curve
