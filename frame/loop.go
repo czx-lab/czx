@@ -146,7 +146,6 @@ func (l *Loop) Start() {
 			case <-l.quit:
 				return
 			case <-ticker.C:
-				l.mu.Lock()
 				var isExecEmpty bool
 
 				if l.eproc != nil && time.Since(lastEmptyTime) >= l.eproc.Frequency {
@@ -162,8 +161,6 @@ func (l *Loop) Start() {
 					// Process the current frame and its inputs
 					l.processFrame(isExecEmpty)
 				}
-
-				l.mu.Unlock()
 
 				// Check for heartbeat
 				lastHeartbeat = l.checkHeartbeat(lastHeartbeat)
@@ -239,6 +236,7 @@ func (l *Loop) processFrame(execEmpty bool) {
 		Inputs:  make(map[string]Message),
 	}
 
+	l.mu.Lock()
 	// Process the current frame and its inputs
 	for playerID, messages := range l.inFrameQueue {
 		if len(messages) > 0 {
@@ -252,11 +250,14 @@ func (l *Loop) processFrame(execEmpty bool) {
 		// If the queue is empty, remove the player from the inFrameQueue
 		delete(l.inFrameQueue, playerID)
 	}
+	l.mu.Unlock()
 
 	// Push the current frame to the queue
 	l.queue.Push(frame)
 
+	l.mu.Lock()
 	l.current = frame // Update the current frame
+	l.mu.Unlock()
 
 	l.workpool.Submit(func() {
 		defer func() {
