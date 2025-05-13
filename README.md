@@ -52,7 +52,7 @@ czx.Run(mods...)
 
 Czx 首先会在同一个 goroutine 中按模块注册顺序执行模块的 Init 方法，等到所有模块 Init 方法执行完成后则为每一个模块启动一个 goroutine 并执行模块的 Run 方法。最后，游戏服务器关闭时（Ctrl + C 关闭游戏服务器）将按模块注册相反顺序在同一个 goroutine 中执行模块的 Destroy 方法。
 
-### Czx 源码概览
+Czx 源码概览
 ---------------
 - czx/eventbus 提供了事件驱动的方式来解耦业务逻辑
 - czx/frame 消息 loop 同步相关, 负责循环推送消息与接收消息，帧同步与普通同步
