@@ -81,13 +81,13 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		workpool: workerpool,
 	}
 	if conf.LoopType == LoopTypeNormal {
-		loop.queue = NewQueue[Frame](0)
 		loop.inNormalQueue = make(chan Message, conf.MaxQueueSize)
 	}
 	if conf.DelayFrames > 0 {
 		loop.delayedFrames = make(map[uint64]Frame)
 	}
 	if conf.LoopType == LoopTypeSync {
+		loop.queue = NewQueue[Frame](0)
 		loop.inFrameQueue = make(map[string][]Message)
 	}
 
@@ -326,6 +326,9 @@ func (l *Loop) processFrame(execEmpty bool) {
 			}
 		}
 	}
+
+	// Push the current frame to the queue
+	l.queue.Push(frame)
 
 	l.current = frame // Update the current frame
 
