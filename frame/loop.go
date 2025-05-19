@@ -327,9 +327,6 @@ func (l *Loop) processFrame(execEmpty bool) {
 		}
 	}
 
-	// Push the current frame to the queue
-	l.queue.Push(frame)
-
 	l.current = frame // Update the current frame
 
 	l.workpool.Submit(func() {
