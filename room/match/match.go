@@ -13,6 +13,8 @@ var (
 	ErrMaxQueuePlayer = errors.New("max queue player")
 	ErrAlreadyMatch   = errors.New("macth is already waiting")
 	ErrMatchTimeout   = errors.New("match timeout")
+	ErrPlayerInQueue  = errors.New("player in queue")
+	ErrGtMatchNum     = errors.New("greater than the number of matches")
 )
 
 type (
@@ -46,7 +48,7 @@ func NewMatch(processor MatchProcessor) *Match {
 }
 
 // StartMatching starts a new match with the given matchID and number of players.
-func (mc *Match) StartMatching(args Matching) ([]string, error) {
+func (mc *Match) StartMatching(args Matching, ownerIDs ...string) ([]string, error) {
 	mc.mu.Lock()
 
 	if _, exists := mc.statusMap[args.MatchID]; exists {
@@ -54,11 +56,25 @@ func (mc *Match) StartMatching(args Matching) ([]string, error) {
 		return nil, ErrAlreadyMatch
 	}
 
+	if len(ownerIDs) > int(args.Num) {
+		mc.mu.Unlock()
+		return nil, ErrGtMatchNum
+	}
+
 	mc.statusMap[args.MatchID] = struct{}{}
 	mc.mu.Unlock()
 
 	deadline := time.Now().Add(args.Timeout)
 	players := make([]string, 0, args.Num)
+
+	// If there are ownerIDs, we need to remove them from the queue.
+	if len(ownerIDs) > 0 {
+		players = append(players, ownerIDs...)
+
+		for _, id := range ownerIDs {
+			mc.Remove(id)
+		}
+	}
 
 	for {
 		if len(players) == int(args.Num) {
@@ -108,6 +124,10 @@ func (mc *Match) Remove(playerID string) {
 func (mc *Match) push(playerID string, toFront bool) error {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
+
+	if _, exists := mc.index[playerID]; exists {
+		return ErrPlayerInQueue
+	}
 
 	// Check if the queue is full
 	if mc.queue.Len() >= defaultQueueSize {
