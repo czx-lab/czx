@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/czx-lab/czx/utils/xslices"
 )
 
 const defaultQueueSize = 1000
@@ -35,6 +37,7 @@ type (
 		processor MatchProcessor
 		queue     *list.List
 		index     map[string]*list.Element
+		done      chan string
 	}
 )
 
@@ -44,6 +47,7 @@ func NewMatch(processor MatchProcessor) *Match {
 		statusMap: make(map[string]struct{}),
 		queue:     list.New(),
 		index:     make(map[string]*list.Element),
+		done:      make(chan string),
 	}
 }
 
@@ -70,13 +74,25 @@ func (mc *Match) StartMatching(args Matching, ownerIDs ...string) ([]string, err
 	// If there are ownerIDs, we need to remove them from the queue.
 	if len(ownerIDs) > 0 {
 		players = append(players, ownerIDs...)
-
-		for _, id := range ownerIDs {
-			mc.Remove(id)
-		}
 	}
 
 	for {
+		select {
+		case matchId := <-mc.done:
+			if matchId == args.MatchID {
+				for _, player := range players {
+					if _, ok := xslices.Search(ownerIDs, func(id string) bool {
+						return id == player
+					}); ok {
+						continue
+					}
+					mc.push(player, true) // Re-enqueue the player to the front of the queue.
+				}
+				return players, nil
+			}
+		default:
+			// Continue without blocking if no match is done.
+		}
 		if len(players) == int(args.Num) {
 			break
 		}
@@ -96,6 +112,16 @@ func (mc *Match) StartMatching(args Matching, ownerIDs ...string) ([]string, err
 	mc.mu.Unlock()
 
 	return players, nil
+}
+
+// CancelMatch cancels a match with the given matchID.
+// It removes the matchID from the statusMap and signals that the match is done.
+func (mc *Match) CancelMatch(matchID string) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	delete(mc.statusMap, matchID)
+	mc.done <- matchID
 }
 
 // Enqueue adds a player to the queue of the specified matchID.
