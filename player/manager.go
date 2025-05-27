@@ -96,6 +96,19 @@ func (p *PlayerManager) Num() int {
 	return len(p.players)
 }
 
+// Delete removes a player from the player manager by ID. If the player does not exist, it returns an error.
+func (p *PlayerManager) Delete(id string) error {
+	p.Lock()
+	defer p.Unlock()
+
+	if _, ok := p.players[id]; !ok {
+		return ErrPlayerNotFound
+	}
+
+	delete(p.players, id)
+	return nil
+}
+
 // Remove removes a player from the player manager. If the player does not exist, it does nothing.
 func (p *PlayerManager) Remove(id string, destroy bool) error {
 	p.Lock()
