@@ -51,6 +51,20 @@ func (c *CMap[K, V]) Delete(key K) {
 	delete(c.data, key)
 }
 
+// DeleteIf removes key-value pairs that match the provided condition.
+// The function f should return true for pairs that should be deleted.
+func (c *CMap[K, V]) DeleteIf(f func(K, V) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Iterate over the map and delete keys that match the condition
+	for k, v := range c.data {
+		if f(k, v) {
+			delete(c.data, k)
+		}
+	}
+}
+
 // Iterator iterates over all key-value pairs in the map,
 // calling the provided function for each pair.
 func (c *CMap[K, V]) Iterator(f func(K, V) bool) {
