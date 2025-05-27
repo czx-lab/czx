@@ -112,3 +112,13 @@ func (c *CMap[K, V]) Set(key K, value V) {
 	defer c.mu.Unlock()
 	c.data[key] = value
 }
+
+// Clear removes all key-value pairs from the map.
+// It resets the map to an empty state.
+func (c *CMap[K, V]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Clear the map
+	c.data = make(map[K]V)
+}
