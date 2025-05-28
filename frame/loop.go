@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/xlog"
 	"github.com/panjf2000/ants/v2"
 )
@@ -55,7 +56,7 @@ type (
 		// Handler for empty processing
 		eproc    *EmptyProcessor
 		workpool *ants.Pool
-		queue    *Queue[Frame] // Queue for storing frames
+		queue    *cqueue.Queue[Frame] // Queue for storing frames
 		// delayed frames
 		delayedFrames map[uint64]Frame
 	}
@@ -87,7 +88,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		loop.delayedFrames = make(map[uint64]Frame)
 	}
 	if conf.LoopType == LoopTypeSync {
-		loop.queue = NewQueue[Frame](0)
+		loop.queue = cqueue.NewQueue[Frame](0)
 		loop.inFrameQueue = make(map[string][]Message)
 	}
 
