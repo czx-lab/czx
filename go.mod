@@ -2,6 +2,36 @@ module github.com/czx-lab/czx
 
 go 1.24.2
 
+retract (
+	v1.0.1
+	v1.0.2
+	v1.0.3
+	v1.0.4
+	v1.0.5
+	v1.0.6
+	v1.0.7
+	v1.0.8
+	v1.0.9
+	v1.0.10
+	v1.0.11
+	v1.1.11
+	v1.1.12
+	v1.2.20
+	v1.2.19
+	v1.2.18
+	v1.2.17
+	v1.2.16
+	v1.2.15
+	v1.2.14
+	v1.2.13
+	v1.2.12	
+	v1.4.2
+	v1.3.5
+	v1.3.3
+	v1.3.2
+	v1.3.0
+)
+
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.41.1
