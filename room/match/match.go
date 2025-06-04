@@ -73,31 +73,46 @@ func (mc *Match) StartMatching(args Matching, ownerIDs ...string) ([]string, err
 
 	// If there are ownerIDs, we need to remove them from the queue.
 	if len(ownerIDs) > 0 {
+		if mc.processor != nil {
+			mc.processor.OnMatched(ownerIDs) // Notify the processor about the owners.
+		}
 		players = append(players, ownerIDs...)
 	}
 
 	for {
 		select {
 		case matchId := <-mc.done:
-			if matchId == args.MatchID {
-				for _, player := range players {
-					if _, ok := xslices.Search(ownerIDs, func(id string) bool {
-						return id == player
-					}); ok {
-						continue
-					}
-					mc.push(player, true) // Re-enqueue the player to the front of the queue.
-				}
-				return players, nil
+			if matchId != args.MatchID {
+				continue // Ignore matches that are not the one we are waiting for.
 			}
+			for _, player := range players {
+				if _, ok := xslices.Search(ownerIDs, func(id string) bool {
+					return id == player
+				}); ok {
+					continue
+				}
+				mc.push(player, true) // Re-enqueue the player to the front of the queue.
+			}
+			return nil, nil
 		default:
 			// Continue without blocking if no match is done.
 		}
 		if len(players) == int(args.Num) {
 			break
 		}
+		// Check if the match has timed out
+		// If the deadline has passed, we need to clean up and return an error.
 		if time.Now().After(deadline) {
-			return nil, ErrMatchTimeout
+			mc.mu.Lock()
+			// Remove the matchID from the statusMap
+			delete(mc.statusMap, args.MatchID)
+			mc.mu.Unlock()
+			// Signal that the match is done
+			mc.done <- args.MatchID
+			if mc.processor != nil {
+				mc.processor.OnDeadline(args.MatchID) // Notify the processor about the deadline.
+			}
+			continue
 		}
 		playerId, ok := mc.dequeue(args.Fn)
 		if !ok {
@@ -105,6 +120,10 @@ func (mc *Match) StartMatching(args Matching, ownerIDs ...string) ([]string, err
 		}
 
 		players = append(players, *playerId)
+
+		if mc.processor != nil {
+			mc.processor.OnMatched([]string{*playerId}) // Notify the processor about the matched player.
+		}
 	}
 
 	mc.mu.Lock()

@@ -8,6 +8,11 @@ type (
 		Dequeue() (playerID string, err error)
 		// Enqueue adds a player to the queue.
 		Enqueue(playerID string) error
+		// OnMatched is called when a group of players are successfully matched.
+		OnMatched(players []string)
+		// OnDeadline is called when a matching process times out.
+		// It receives the MatchID to identify which match has timed out.
+		OnDeadline(MatchID string)
 	}
 	// MatchHandler is a function type that takes a player ID and returns a boolean indicating success or failure.
 	MatchHandler func(playerId string) bool
