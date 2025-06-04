@@ -2,7 +2,10 @@ package cqueue
 
 import (
 	"fmt"
+	"slices"
 	"sync"
+
+	"github.com/czx-lab/czx/utils/xslices"
 )
 
 // Generic queue type
@@ -19,6 +22,43 @@ func NewQueue[T any](maxcap int) *Queue[T] {
 	return &Queue[T]{
 		maxCapacity: maxcap,
 	}
+}
+
+// Delete removes the first occurrence of an element from the queue.
+func (q *Queue[T]) DeleteFunc(fn func(T) bool) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if len(q.queue) == 0 {
+		return false
+	}
+
+	q.queue = slices.DeleteFunc(q.queue, func(item T) bool {
+		return fn(item)
+	})
+
+	return true
+}
+
+// Search searches for an element in the queue using a custom function.
+func (q *Queue[T]) SearchFunc(fn func(T) bool) (T, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if len(q.queue) == 0 {
+		var zero T
+		return zero, false
+	}
+
+	index, ok := xslices.Search(q.queue, func(item T) bool {
+		return fn(item)
+	})
+	if ok {
+		return q.queue[index], true
+	}
+
+	var zero T
+	return zero, false
 }
 
 // Push adds an element to the end of the queue.
