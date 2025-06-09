@@ -12,6 +12,10 @@ const (
 	EvtNewAgent = "AgentNew"
 )
 
+// DefaultCapacity is the default capacity for event channels.
+// It defines how many messages can be buffered in each channel before blocking.
+var DefaultCapacity = 100
+
 type EventBus struct {
 	mu       sync.RWMutex
 	handlers map[string][]chan any
@@ -20,7 +24,7 @@ type EventBus struct {
 
 // DefaultBus is the default instance of EventBus.
 // It is used to manage events and their subscribers.
-var DefaultBus = NewEventBus(100)
+var DefaultBus = NewEventBus(DefaultCapacity)
 
 // NewEventBus creates a new EventBus instance.
 // It initializes the handlers map to store event subscribers.
