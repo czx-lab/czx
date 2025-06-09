@@ -15,17 +15,19 @@ const (
 type EventBus struct {
 	mu       sync.RWMutex
 	handlers map[string][]chan any
+	capacity int
 }
 
 // DefaultBus is the default instance of EventBus.
 // It is used to manage events and their subscribers.
-var DefaultBus = NewEventBus()
+var DefaultBus = NewEventBus(100)
 
 // NewEventBus creates a new EventBus instance.
 // It initializes the handlers map to store event subscribers.
-func NewEventBus() *EventBus {
+func NewEventBus(cap int) *EventBus {
 	return &EventBus{
 		handlers: make(map[string][]chan any),
+		capacity: cap,
 	}
 }
 
@@ -35,7 +37,7 @@ func (eb *EventBus) SubscribeOnChannel(event string) <-chan any {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	ch := make(chan any, 1)
+	ch := make(chan any, eb.capacity)
 	eb.handlers[event] = append(eb.handlers[event], ch)
 
 	return ch
@@ -47,7 +49,7 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	ch := make(chan any, 1)
+	ch := make(chan any, eb.capacity)
 	eb.handlers[event] = append(eb.handlers[event], ch)
 
 	go func() {
@@ -105,7 +107,7 @@ func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
 // SubscribeOnce creates a new subscription for the given event.
 // It will automatically unsubscribe itself after receiving the first message.
 func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
-	ch := make(chan any, 1)
+	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
 	eb.handlers[event] = append(eb.handlers[event], ch)
 	eb.mu.Unlock()
@@ -124,7 +126,7 @@ func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
 // SubscribeWithFilter creates a new subscription for the given event with a filter function.
 // It will only pass messages that satisfy the filter condition to the callback.
 func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool, callback func(message any)) {
-	ch := make(chan any, 1)
+	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
 	eb.handlers[event] = append(eb.handlers[event], ch)
 	eb.mu.Unlock()
@@ -150,11 +152,6 @@ func (eb *EventBus) Publish(event string, data any) {
 	}
 
 	for _, ch := range subscribers {
-		go func(c chan any) {
-			select {
-			case c <- data: // Send data to the channel
-			default: // If the channel is full, skip sending
-			}
-		}(ch)
+		ch <- data
 	}
 }
