@@ -152,6 +152,13 @@ func (eb *EventBus) Publish(event string, data any) {
 	}
 
 	for _, ch := range subscribers {
-		ch <- data
+		go func(q chan any) {
+			select {
+			case ch <- data:
+			default:
+				// If the channel is full, we skip sending the message.
+				// This prevents blocking the publisher if the channel is full.
+			}
+		}(ch)
 	}
 }
