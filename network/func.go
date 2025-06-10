@@ -81,11 +81,14 @@ func GetClientIPFromProxyProtocol(conn net.Conn) (ip, port *string, err error) {
 func GetClientIP(r *http.Request) (ip, port *string) {
 	ip = new(string)
 	port = new(string)
-	xff := r.Header.Get("X-Forward-For")
-	for ipitem := range strings.SplitSeq(xff, ",") {
-		if net.ParseIP(ipitem) != nil {
-			*ip = ipitem
-			return
+	xff := r.Header.Get("X-Forwarded-For")
+	if len(xff) > 0 {
+		for ipitem := range strings.SplitSeq(xff, ",") {
+			ipitem = strings.TrimSpace(ipitem)
+			if net.ParseIP(ipitem) != nil {
+				*ip = ipitem
+				return
+			}
 		}
 	}
 
