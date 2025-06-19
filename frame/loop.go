@@ -400,12 +400,12 @@ func (l *Loop) Receive(in Message) error {
 	defer l.mu.Unlock()
 
 	if l.conf.LoopType == LoopTypeNormal {
-		if len(l.inNormalQueue) >= cap(l.inNormalQueue) {
+		select {
+		case l.inNormalQueue <- in:
+			return nil
+		default:
 			return errors.New("input queue is full")
 		}
-
-		l.inNormalQueue <- in
-		return nil
 	}
 
 	// Enforce maximum queue size
