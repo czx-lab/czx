@@ -3,6 +3,8 @@ package eventbus
 import (
 	"slices"
 	"sync"
+
+	"github.com/czx-lab/czx/xlog"
 )
 
 const (
@@ -162,6 +164,7 @@ func (eb *EventBus) Publish(event string, data any) {
 			default:
 				// If the channel is full, we skip sending the message.
 				// This prevents blocking the publisher if the channel is full.
+				xlog.Write().Sugar().Warnf("EventBus: channel full, skipping message for event %s", event)
 			}
 		}(ch)
 	}
