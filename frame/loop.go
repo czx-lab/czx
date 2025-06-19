@@ -39,7 +39,7 @@ type (
 	}
 
 	Loop struct {
-		mu   sync.Mutex
+		mu   sync.RWMutex
 		quit chan struct{}
 		// Channel for adjusting the frequency dynamically
 		adjust chan struct{} // Channel for adjusting the frequency dynamically
@@ -98,6 +98,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if proc == nil {
 		return errors.New("empty processor cannot be nil")
 	}
@@ -180,6 +181,15 @@ func (l *Loop) Start() {
 
 				// Check for heartbeat
 				lastHeartbeat = l.checkHeartbeat(lastHeartbeat)
+
+				// Adjust the worker pool size based on the number of waiting tasks
+				// This is useful for dynamically scaling the worker pool based on load
+				waiting := l.workpool.Waiting()
+				if waiting > 0 {
+					l.workpool.Tune(waiting + 1) // Increase the worker pool size if there are waiting tasks
+				} else {
+					l.workpool.Tune(l.conf.PoolSize) // Reset to the configured pool size
+				}
 			}
 		}
 	}()
@@ -278,18 +288,21 @@ func (l *Loop) processFrame(execEmpty bool) {
 		Inputs:  make(map[string]Message),
 	}
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if l.conf.DelayFrames > 0 {
+		l.mu.Lock()
 		delayFrame := l.delayedFrame(frame)
 		if delayFrame != nil {
 			frame = *delayFrame
 		}
+		l.mu.Unlock()
 	}
 
+	l.mu.RLock()
+	queues := l.inFrameQueue
+	l.mu.RUnlock()
+
 	// Process the current frame and its inputs
-	for playerID, messages := range l.inFrameQueue {
+	for playerID, messages := range queues {
 		if len(messages) > 0 {
 			// Sort messages by timestamp
 			// This ensures that the earliest message is processed first
@@ -308,30 +321,38 @@ func (l *Loop) processFrame(execEmpty bool) {
 			}
 
 			frame.Inputs[playerID] = messages[0]
+			l.mu.Lock()
 			l.inFrameQueue[playerID] = messages[1:]
+			l.mu.Unlock()
 		} else {
 			if !l.conf.DefaultFill {
+				l.mu.Lock()
 				// Ensure the player's input map is cleared if no messages are left
 				delete(l.current.Inputs, playerID)
 				// If the queue is empty, remove the player from the inFrameQueue
 				delete(l.inFrameQueue, playerID)
+				l.mu.Unlock()
 				continue
 			}
 
 			// If the queue is empty, fill it with default values
+			l.mu.RLock()
 			frame.Inputs[playerID] = Message{
 				PlayerID:   playerID,
 				SequenceID: l.current.Inputs[playerID].SequenceID + 1,
 				Timestamp:  time.Now(),
 				Data:       nil, // Default fill data
 			}
+			l.mu.RUnlock()
 		}
 	}
 
 	// Push the current frame to the queue
 	l.queue.Push(frame)
 
+	l.mu.Lock()
 	l.current = frame // Update the current frame
+	l.mu.Unlock()
 
 	l.workpool.Submit(func() {
 		defer func() {
@@ -383,9 +404,6 @@ func (l *Loop) Stop() {
 		close(l.quit) // Signal all goroutines to stop
 	}
 
-	// Wait for all tasks to finish
-	l.workpool.Waiting()
-
 	// Release the worker pool
 	l.workpool.Release()
 
@@ -396,9 +414,6 @@ func (l *Loop) Stop() {
 // Receive receives a message and adds it to the input queue for processing.
 // It enforces a maximum queue size for each player in the sync loop type.
 func (l *Loop) Receive(in Message) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if l.conf.LoopType == LoopTypeNormal {
 		select {
 		case l.inNormalQueue <- in:
@@ -409,6 +424,9 @@ func (l *Loop) Receive(in Message) error {
 	}
 
 	// Enforce maximum queue size
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if len(l.inFrameQueue[in.PlayerID]) >= int(l.conf.MaxQueueSize) {
 		return fmt.Errorf("input queue for player %s is full, dropping message", in.PlayerID)
 	}
