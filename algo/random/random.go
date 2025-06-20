@@ -29,9 +29,9 @@ func RangeRandom[T RangeInterface](min, max T) T {
 
 // SlicesRandom returns a slice of random elements from the input slice s.
 // The number of elements in the result slice is equal to count.
-func SlicesRandom[T comparable](s []T, count int) []T {
+func SlicesRandom[T comparable, S ~[]T](s S, count int) S {
 	exists := make(map[T]struct{})
-	var result []T
+	var result S
 
 	for len(result) < count {
 		index := rand.IntN(len(s))
