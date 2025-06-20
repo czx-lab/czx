@@ -3,7 +3,9 @@ package eventbus
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 
+	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/xlog"
 )
 
@@ -14,26 +16,39 @@ const (
 	EvtNewAgent = "AgentNew"
 )
 
-// DefaultCapacity is the default capacity for event channels.
-// It defines how many messages can be buffered in each channel before blocking.
-var DefaultCapacity = 100
-
 type EventBus struct {
-	mu       sync.RWMutex
-	handlers map[string][]chan any
-	capacity int
+	mu            sync.RWMutex
+	chanHandlers  map[string][]chan any
+	queueHandlers map[string][]*cqueue.Queue[any]
+	capacity      int32
 }
 
-// DefaultBus is the default instance of EventBus.
-// It is used to manage events and their subscribers.
-var DefaultBus = NewEventBus(DefaultCapacity)
+var (
+	// DefaultCapacity is the default capacity for event channels.
+	// It defines how many messages can be buffered in each channel before blocking.
+	defaultCapacity int32 = 100
+	// DefaultBus is the default instance of EventBus.
+	// It is used to manage events and their subscribers.
+	DefaultBus              = NewEventBus(defaultCapacity)
+	busMu      sync.RWMutex // Mutex to protect the DefaultBus instance
+)
+
+// LoadCapacity sets the default capacity for event channels.
+func LoadCapacity(cap int) {
+	atomic.StoreInt32(&defaultCapacity, int32(cap))
+	busMu.Lock()
+	defer busMu.Unlock()
+
+	DefaultBus = NewEventBus(defaultCapacity)
+}
 
 // NewEventBus creates a new EventBus instance.
 // It initializes the handlers map to store event subscribers.
-func NewEventBus(cap int) *EventBus {
+func NewEventBus(cap int32) *EventBus {
 	return &EventBus{
-		handlers: make(map[string][]chan any),
-		capacity: cap,
+		chanHandlers:  make(map[string][]chan any),
+		queueHandlers: make(map[string][]*cqueue.Queue[any]),
+		capacity:      cap,
 	}
 }
 
@@ -44,7 +59,7 @@ func (eb *EventBus) SubscribeOnChannel(event string) <-chan any {
 	defer eb.mu.Unlock()
 
 	ch := make(chan any, eb.capacity)
-	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 
 	return ch
 }
@@ -56,7 +71,7 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 	defer eb.mu.Unlock()
 
 	ch := make(chan any, eb.capacity)
-	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 
 	go func() {
 		for msg := range ch {
@@ -68,22 +83,81 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 	}()
 }
 
+// QueueSubscribe creates a new queue for the given event and starts a goroutine to process messages.
+// It allows for processing messages in a queue-like manner, where messages are processed in the order they are received.
+func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
+	eb.mu.Lock()
+	eb.queueHandlers[event] = append(eb.queueHandlers[event], cqueue.NewQueue[any](int(eb.capacity)))
+	eb.mu.Unlock()
+
+	go func() {
+		for {
+			// Check if there are any messages in the queue for the event
+			eb.mu.RLock()
+			queues := eb.queueHandlers[event]
+			if len(queues) == 0 {
+				eb.mu.RUnlock()
+				continue
+			}
+
+			// Get the first queue for the event
+			queue := queues[0]
+			eb.mu.RUnlock()
+
+			// Try to dequeue a message
+			msg, ok := queue.Pop()
+			if !ok {
+				continue // No message to process
+			}
+
+			if callback != nil {
+				callback(msg) // Call the callback function with the received message
+			}
+		}
+	}()
+}
+
+// SubscribeOnQueue creates a new queue for the given event and returns it.
+func (eb *EventBus) SubscribeOnQueue(event string) *cqueue.Queue[any] {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	queue := cqueue.NewQueue[any](int(eb.capacity))
+	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
+
+	return queue
+}
+
 // Unsubscriben removes the given event from the handler mapping.
-// It also closes the channel to indicate that it is no longer needed.
+// This function will clear all channels and queues associated with the event.
+// It is used to clean up resources when an event is no longer needed.
 func (eb *EventBus) Unsubscriben(event string) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	subscribers, ok := eb.handlers[event]
+	subscribers, ok := eb.chanHandlers[event]
 	if !ok {
-		return
+		goto UnsubscribenQueue
 	}
 
 	for _, subscriber := range subscribers {
 		close(subscriber)
 	}
 
-	delete(eb.handlers, event)
+	delete(eb.chanHandlers, event)
+
+	// unsubscribe from queues if they exist
+UnsubscribenQueue:
+	if len(eb.queueHandlers[event]) == 0 {
+		return
+	}
+
+	queueSubs := eb.queueHandlers[event]
+	for _, queue := range queueSubs {
+		queue.Clear()
+	}
+
+	delete(eb.queueHandlers, event)
 }
 
 // UnsubscribenChannel removes the specified channel for the given event from the handlers map.
@@ -92,21 +166,43 @@ func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	subscribers, ok := eb.handlers[event]
+	subscribers, ok := eb.chanHandlers[event]
 	if !ok {
 		return
 	}
 
 	for i, subscriber := range subscribers {
 		if subscriber == ch {
-			eb.handlers[event] = slices.Delete(subscribers, i, i+1)
+			eb.chanHandlers[event] = slices.Delete(subscribers, i, i+1)
 			close(subscriber)
 			break
 		}
 	}
 
-	if len(eb.handlers[event]) == 0 {
-		delete(eb.handlers, event)
+	if len(eb.chanHandlers[event]) == 0 {
+		delete(eb.chanHandlers, event)
+	}
+}
+
+// UnsubscribeQueue removes the specified queue for the given event from the queue handlers map.
+func (eb *EventBus) UnsubscribeQueue(event string, queue *cqueue.Queue[any]) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	queues, ok := eb.queueHandlers[event]
+	if !ok {
+		return
+	}
+
+	for i, q := range queues {
+		if q == queue {
+			eb.queueHandlers[event] = slices.Delete(queues, i, i+1)
+			break
+		}
+	}
+
+	if len(eb.queueHandlers[event]) == 0 {
+		delete(eb.queueHandlers, event)
 	}
 }
 
@@ -115,7 +211,7 @@ func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
 func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
 	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
-	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 	eb.mu.Unlock()
 
 	go func() {
@@ -134,7 +230,7 @@ func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
 func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool, callback func(message any)) {
 	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
-	eb.handlers[event] = append(eb.handlers[event], ch)
+	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 	eb.mu.Unlock()
 
 	go func() {
@@ -146,13 +242,32 @@ func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool
 	}()
 }
 
+// PublishWithQueue sends the data to all queues subscribed to the given event.
+// If there are no queues, it does nothing.
+func (eb *EventBus) PublishWithQueue(event string, data any) {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+
+	queues, ok := eb.queueHandlers[event]
+	if !ok {
+		return
+	}
+
+	for _, queue := range queues {
+		if err := queue.Push(data); err != nil {
+			xlog.Write().Sugar().Errorf("EventBus: failed to push data to queue for event %s: %v", event, err)
+			continue
+		}
+	}
+}
+
 // Publish sends the data to all subscribers of the given event.
 // If there are no subscribers, it does nothing.
 func (eb *EventBus) Publish(event string, data any) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
-	subscribers, ok := eb.handlers[event]
+	subscribers, ok := eb.chanHandlers[event]
 	if !ok {
 		return
 	}
