@@ -274,6 +274,9 @@ func (l *Loop) delayedFrame(frame Frame) *Frame {
 // process processes the current frame and its inputs, and prepares the next frame.
 // It handles the input queue for each player and updates the current frame accordingly.
 func (l *Loop) processFrame(execEmpty bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if len(l.inFrameQueue) == 0 {
 		if l.eproc != nil && l.eproc.Handler != nil && execEmpty {
 			l.eproc.Handler()
@@ -289,20 +292,14 @@ func (l *Loop) processFrame(execEmpty bool) {
 	}
 
 	if l.conf.DelayFrames > 0 {
-		l.mu.Lock()
 		delayFrame := l.delayedFrame(frame)
 		if delayFrame != nil {
 			frame = *delayFrame
 		}
-		l.mu.Unlock()
 	}
 
-	l.mu.RLock()
-	queues := l.inFrameQueue
-	l.mu.RUnlock()
-
 	// Process the current frame and its inputs
-	for playerID, messages := range queues {
+	for playerID, messages := range l.inFrameQueue {
 		if len(messages) > 0 {
 			// Sort messages by timestamp
 			// This ensures that the earliest message is processed first
@@ -321,38 +318,29 @@ func (l *Loop) processFrame(execEmpty bool) {
 			}
 
 			frame.Inputs[playerID] = messages[0]
-			l.mu.Lock()
 			l.inFrameQueue[playerID] = messages[1:]
-			l.mu.Unlock()
 		} else {
 			if !l.conf.DefaultFill {
-				l.mu.Lock()
 				// Ensure the player's input map is cleared if no messages are left
 				delete(l.current.Inputs, playerID)
 				// If the queue is empty, remove the player from the inFrameQueue
 				delete(l.inFrameQueue, playerID)
-				l.mu.Unlock()
 				continue
 			}
 
 			// If the queue is empty, fill it with default values
-			l.mu.RLock()
 			frame.Inputs[playerID] = Message{
 				PlayerID:   playerID,
 				SequenceID: l.current.Inputs[playerID].SequenceID + 1,
 				Timestamp:  time.Now(),
 				Data:       nil, // Default fill data
 			}
-			l.mu.RUnlock()
 		}
 	}
 
 	// Push the current frame to the queue
 	l.queue.Push(frame)
-
-	l.mu.Lock()
 	l.current = frame // Update the current frame
-	l.mu.Unlock()
 
 	l.workpool.Submit(func() {
 		defer func() {
