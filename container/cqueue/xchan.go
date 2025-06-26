@@ -13,6 +13,10 @@ type (
 		Insize  int // Size of the input channel
 		Outsize int // Size of the output channel
 	}
+	// Xchan is a concurrent channel that allows writing to an input channel and reading from an output channel.
+	// It uses a ring buffer to manage the flow of data between the input and output channels.
+	// It supports burst writes and ensures that the output channel is not blocked by full buffers.
+	// The buffer size is configurable, and it can handle concurrent writes and reads efficiently.
 	Xchan[T any] struct {
 		conf   XchanConf
 		size   int64
