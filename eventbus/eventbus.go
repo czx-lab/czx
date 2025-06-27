@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/xlog"
@@ -87,26 +88,16 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 // It allows for processing messages in a queue-like manner, where messages are processed in the order they are received.
 func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 	eb.mu.Lock()
-	eb.queueHandlers[event] = append(eb.queueHandlers[event], cqueue.NewQueue[any](int(eb.capacity)))
+	queue := cqueue.NewQueue[any](int(eb.capacity))
+	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 	eb.mu.Unlock()
 
 	go func() {
 		for {
-			// Check if there are any messages in the queue for the event
-			eb.mu.RLock()
-			queues := eb.queueHandlers[event]
-			if len(queues) == 0 {
-				eb.mu.RUnlock()
-				continue
-			}
-
-			// Get the first queue for the event
-			queue := queues[0]
-			eb.mu.RUnlock()
-
 			// Try to dequeue a message
 			msg, ok := queue.Pop()
 			if !ok {
+				time.Sleep(10 * time.Millisecond)
 				continue // No message to process
 			}
 
