@@ -61,10 +61,12 @@ func (q *Queue[T]) SearchFunc(fn func(T) bool) (T, bool) {
 	return zero, false
 }
 
-// Push adds an element to the end of the queue.
-// It locks the queue to ensure thread safety while adding the element.
-// The element is appended to the end of the queue slice.
-func (q *Queue[T]) Push(data T) error {
+// Push adds one or more elements to the end of the queue.
+// It locks the queue to ensure thread safety while adding elements.
+// If the queue has a maximum capacity and is full, it returns an error.
+// If the queue is not full, it appends the elements to the end of the queue.
+// It returns nil if the operation is successful.
+func (q *Queue[T]) Push(data ...T) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -72,7 +74,7 @@ func (q *Queue[T]) Push(data T) error {
 		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
 	}
 
-	q.queue = append(q.queue, data)
+	q.queue = append(q.queue, data...)
 
 	return nil
 }
@@ -126,21 +128,6 @@ func (q *Queue[T]) Peek() (T, bool) {
 	}
 
 	return q.queue[0], true
-}
-
-// PushBatch adds multiple elements to the end of the queue.
-// It locks the queue to ensure thread safety while adding the elements.
-func (q *Queue[T]) PushBatch(data []T) error {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	if q.maxCapacity > 0 && len(q.queue) >= q.maxCapacity {
-		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
-	}
-
-	q.queue = append(q.queue, data...)
-
-	return nil
 }
 
 // PopBatch removes and returns up to `n` elements from the queue.
