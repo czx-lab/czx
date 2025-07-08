@@ -197,6 +197,9 @@ func (r *Room) stop() {
 		return
 	}
 	r.running = false
+	if r.processor != nil {
+		r.processor.Close()
+	}
 }
 
 // Stop the room loop and release resources

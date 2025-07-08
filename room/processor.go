@@ -5,4 +5,6 @@ type RoomProcessor interface {
 	Join(playerID string) error
 	// Leave is called when a player leaves the room
 	Leave(playerID string) error
+	// Close is called when the room is closed
+	Close()
 }

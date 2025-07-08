@@ -10,6 +10,11 @@ import (
 
 type roomprocessor struct{}
 
+// Close implements RoomProcessor.
+func (r *roomprocessor) Close() {
+	fmt.Println("roomprocessor closed")
+}
+
 // Join implements RoomProcessor.
 func (r *roomprocessor) Join(playerID string) error {
 	fmt.Println("roomprocessor Join", playerID)
