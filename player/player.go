@@ -66,6 +66,13 @@ func (p *Player) Heartbeat() {
 	p.heartbeatLogic(p.agent)
 }
 
+// StopHeartbeat stops sending heartbeat signals to the player agent
+// This is typically called when the player is no longer needed or when the game session ends.
+func (p *Player) StopHeartbeat() {
+	// Unregister from heartbeat manager
+	GlobalHeartbeat.Unregister(p)
+}
+
 // Close the player connection and clean up resources
 func (p *Player) Close() {
 	if p.agent != nil {

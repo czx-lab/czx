@@ -70,5 +70,7 @@ func (hm *Heartbeat) Unregister(player *Player) {
 	hm.mu.Lock()
 	defer hm.mu.Unlock()
 
+	hm.Stop()
+
 	delete(hm.players, player)
 }
