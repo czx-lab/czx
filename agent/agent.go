@@ -12,6 +12,7 @@ import (
 	"github.com/czx-lab/czx/network"
 	xtcp "github.com/czx-lab/czx/network/tcp"
 	"github.com/czx-lab/czx/network/ws"
+	"github.com/czx-lab/czx/network/xkcp"
 	"github.com/czx-lab/czx/xlog"
 
 	"go.uber.org/zap"
@@ -25,6 +26,7 @@ type (
 	GateConf struct {
 		ws.WsServerConf
 		xtcp.TcpServerConf
+		xkcp.KcpServerConf
 		gnetcp.GnetTcpServerConf
 	}
 	Gate struct {
@@ -32,6 +34,7 @@ type (
 		processor network.Processor
 		wsSrv     *ws.WsServer
 		tcpSrv    *xtcp.TcpServer
+		kcpSrv    *xkcp.KcpServer
 		gnetcpSrv *gnetcp.GnetTcpServer
 		eventBus  *eventbus.EventBus
 		preConn   network.PreConnHandler
@@ -122,6 +125,17 @@ func (g *Gate) Start() {
 			return a
 		})
 		g.gnetcpSrv.Start()
+	}
+	if len(g.option.KcpServerConf.Addr) > 0 {
+		g.kcpSrv = xkcp.NewKcpServer(g.option.KcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
+			a := &agent{conn: tc, gate: g}
+			if a.gate.eventBus != nil {
+				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+			}
+
+			return a
+		})
+		g.kcpSrv.Start()
 	}
 
 	// Handle graceful shutdown on Ctrl+C

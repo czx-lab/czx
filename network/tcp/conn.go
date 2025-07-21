@@ -150,9 +150,9 @@ func (c *TcpConn) ClientAddr() network.ClientAddrMessage {
 	return c.clientAddr
 }
 
-// withClientAddr sets the client address message for the GnetConn instance
+// WithClientAddr sets the client address message for the GnetConn instance
 // This allows the user to specify the client address information associated with the connection
-func (c *TcpConn) withClientAddr(clientAddr network.ClientAddrMessage) {
+func (c *TcpConn) WithClientAddr(clientAddr network.ClientAddrMessage) {
 	c.clientAddr = clientAddr
 }
 
