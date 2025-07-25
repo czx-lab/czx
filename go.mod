@@ -43,6 +43,7 @@ require (
 	github.com/nats-io/nats.go v1.41.1
 	github.com/panjf2000/ants/v2 v2.11.0
 	github.com/panjf2000/gnet/v2 v2.7.2
+	github.com/pebbe/zmq4 v1.4.0
 	github.com/xtaci/kcp-go/v5 v5.6.22
 	go.uber.org/zap v1.27.0
 	google.golang.org/protobuf v1.36.6
