@@ -90,14 +90,14 @@ func (g *Gate) Start() {
 	// Default event bus
 	// If no event bus is provided, use the default event bus.
 	if g.eventBus == nil {
-		g.eventBus = eventbus.DefaultBus
+		g.eventBus = eventbus.NewEventBus(0, eventbus.EvtXqueueType)
 	}
 
 	if len(g.option.WsServerConf.Addr) > 0 {
 		g.wsSrv = ws.NewServer(&g.option.WsServerConf, func(wc *ws.WsConn) network.Agent {
 			a := &agent{conn: wc, gate: g}
 			if a.gate.eventBus != nil {
-				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
 			}
 
 			return a
@@ -108,7 +108,7 @@ func (g *Gate) Start() {
 		g.tcpSrv = xtcp.NewServer(&g.option.TcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
 			a := &agent{conn: tc, gate: g}
 			if a.gate.eventBus != nil {
-				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
 			}
 
 			return a
@@ -119,7 +119,7 @@ func (g *Gate) Start() {
 		g.gnetcpSrv = gnetcp.NewGNetTcpServer(&g.option.GnetTcpServerConf, func(c network.Conn) network.Agent {
 			a := &agent{conn: c, gate: g}
 			if a.gate.eventBus != nil {
-				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
 			}
 
 			return a
@@ -130,7 +130,7 @@ func (g *Gate) Start() {
 		g.kcpSrv = xkcp.NewKcpServer(g.option.KcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
 			a := &agent{conn: tc, gate: g}
 			if a.gate.eventBus != nil {
-				a.gate.eventBus.Publish(eventbus.EvtNewAgent, a)
+				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
 			}
 
 			return a
@@ -164,7 +164,7 @@ func (a *agent) OnClose() {
 		return
 	}
 
-	a.gate.eventBus.Publish(eventbus.EvtAgentClose, a)
+	a.gate.eventBus.PublishWithQueue(eventbus.EvtAgentClose, a)
 }
 
 func (a *agent) Run() {

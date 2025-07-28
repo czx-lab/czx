@@ -15,14 +15,21 @@ const (
 	EvtAgentClose = "AgentClose"
 	//	Event name for when an agent starts.
 	EvtNewAgent = "AgentNew"
+	// EvtDefaultType is the default name for the event bus.
+	EvtDefaultType EvtType = "channel"
+	EvtXqueueType  EvtType = "xqueue"
 )
 
-type EventBus struct {
-	mu            sync.RWMutex
-	chanHandlers  map[string][]chan any
-	queueHandlers map[string][]*cqueue.Queue[any]
-	capacity      int32
-}
+type (
+	EvtType  string
+	EventBus struct {
+		mu            sync.RWMutex
+		chanHandlers  map[string][]chan any
+		queueHandlers map[string][]*cqueue.Queue[any]
+		capacity      int32
+		typ           EvtType
+	}
+)
 
 var (
 	// DefaultCapacity is the default capacity for event channels.
@@ -30,27 +37,33 @@ var (
 	defaultCapacity int32 = 100
 	// DefaultBus is the default instance of EventBus.
 	// It is used to manage events and their subscribers.
-	DefaultBus              = NewEventBus(defaultCapacity)
+	DefaultBus              = NewEventBus(defaultCapacity, EvtDefaultType)
 	busMu      sync.RWMutex // Mutex to protect the DefaultBus instance
 )
 
 // LoadCapacity sets the default capacity for event channels.
-func LoadCapacity(cap int) {
+func LoadCapacity(cap int, typ EvtType) {
 	atomic.StoreInt32(&defaultCapacity, int32(cap))
 	busMu.Lock()
 	defer busMu.Unlock()
 
-	DefaultBus = NewEventBus(defaultCapacity)
+	DefaultBus = NewEventBus(defaultCapacity, typ)
 }
 
 // NewEventBus creates a new EventBus instance.
 // It initializes the handlers map to store event subscribers.
-func NewEventBus(cap int32) *EventBus {
+func NewEventBus(cap int32, typ EvtType) *EventBus {
 	return &EventBus{
 		chanHandlers:  make(map[string][]chan any),
 		queueHandlers: make(map[string][]*cqueue.Queue[any]),
 		capacity:      cap,
+		typ:           typ,
 	}
+}
+
+// Type returns the name of the event bus.
+func (eb *EventBus) Type() EvtType {
+	return eb.typ
 }
 
 // SubscribeOnChannel creates a new channel for the given event and returns it.
