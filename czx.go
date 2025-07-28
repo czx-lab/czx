@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-var version = "1.9.2"
+var version = "1.9.3"
 
 // Module represents a module in the czx framework.
 func Run(mods ...Module) {
