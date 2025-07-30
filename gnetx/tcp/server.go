@@ -24,6 +24,7 @@ type (
 		xtcp.MessageParserConf
 		Addr      string
 		KeepAlive uint64
+		NoDelay   gnet.TCPSocketOpt
 		Multicore bool
 		Ticker    bool
 	}
@@ -62,6 +63,7 @@ func (g *GnetTcpServer) Start() {
 		gnet.WithMulticore(g.conf.Multicore),
 		gnet.WithTCPKeepAlive(time.Duration(g.conf.KeepAlive) * time.Second),
 		gnet.WithTicker(g.conf.Ticker),
+		gnet.WithTCPNoDelay(g.conf.NoDelay),
 	}
 
 	go gnet.Run(g, strings.TrimSpace(addrs[0]), opts...)
