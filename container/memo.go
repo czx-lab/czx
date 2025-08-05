@@ -70,9 +70,9 @@ func (mc *Memo) Destroy() {
 
 // Set sets a value in the cache with a specified time-to-live (TTL).
 func (mc *Memo) Set(key string, value any, ttl time.Duration) error {
-	item := &CacheItem{
-		Value:    value,
-		ExpireAt: time.Now().Add(ttl),
+	item := &CacheItem{Value: value}
+	if ttl > 0 {
+		item.ExpireAt = time.Now().Add(ttl)
 	}
 	mc.data.Set(key, item)
 	return nil
@@ -84,9 +84,15 @@ func (mc *Memo) Get(key string) (any, error) {
 	if !ok {
 		return nil, nil
 	}
-	if item.ExpireAt.Before(time.Now()) {
+
+	if !item.ExpireAt.IsZero() && item.ExpireAt.Before(time.Now()) {
 		mc.data.Delete(key)
 		return nil, nil
 	}
 	return item.Value, nil
+}
+
+// Delete a value from the cache.
+func (mc *Memo) Delete(key string) {
+	mc.data.Delete(key)
 }
