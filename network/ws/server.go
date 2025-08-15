@@ -76,7 +76,6 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(handler.conns) >= handler.opt.MaxConn {
 		handler.mu.Unlock()
 		conn.Close()
-		http.Error(w, "Too many connections", http.StatusServiceUnavailable)
 		return
 	}
 
