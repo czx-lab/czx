@@ -3,6 +3,7 @@ package frame
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ const (
 	maxQueueSize       uint = 100 // Maximum input queue size per player
 	heartbeatFrequency uint = 5   // Heartbeat frequency in seconds
 	poolSize           int  = 20  // Size of the worker pool
+	expandThreshold    int  = 10  // Threshold for expanding the worker pool
+	shrinkThreshold    int  = 5   // Threshold for shrinking the worker pool
 
 	// LoopTypeNormal indicates a normal game loop
 	LoopTypeNormal = "normal"
@@ -32,7 +35,8 @@ type (
 		HeartbeatFrequency uint
 		MaxQueueSize       uint
 		LoopType           string // Type of loop, e.g., "normal" or "sync"
-		PoolSize           int    // Size of the worker pool
+		MinPoolSize        int    // Minimum size of the worker pool
+		MaxPoolSize        int    // Maximum size of the worker pool
 		DefaultFill        bool   // Whether to fill the queue with default values
 		DelayFrames        int    // Number of frames to delay processing
 		Resend             bool   // Whether to resend messages if the sequence ID is not as expected
@@ -59,6 +63,7 @@ type (
 		queue    *cqueue.Queue[Frame] // Queue for storing frames
 		// delayed frames
 		delayedFrames map[uint64]Frame
+		curPoolSize   int // Current size of the worker pool
 	}
 )
 
@@ -70,16 +75,17 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		ants.WithPreAlloc(true),
 		ants.WithDisablePurge(true),
 	}
-	workerpool, err := ants.NewPool(conf.PoolSize, opts...)
+	workerpool, err := ants.NewPool(conf.MinPoolSize, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worker pool: %w", err)
 	}
 
 	loop := &Loop{
-		conf:     conf,
-		quit:     make(chan struct{}),
-		adjust:   make(chan struct{}, 1), // Add buffer to avoid blocking
-		workpool: workerpool,
+		conf:        conf,
+		quit:        make(chan struct{}),
+		adjust:      make(chan struct{}, 1), // Add buffer to avoid blocking
+		workpool:    workerpool,
+		curPoolSize: workerpool.Cap(),
 	}
 	if conf.LoopType == LoopTypeNormal {
 		loop.inNormalQueue = make(chan Message, conf.MaxQueueSize)
@@ -182,14 +188,8 @@ func (l *Loop) Start() {
 				// Check for heartbeat
 				lastHeartbeat = l.checkHeartbeat(lastHeartbeat)
 
-				// Adjust the worker pool size based on the number of waiting tasks
-				// This is useful for dynamically scaling the worker pool based on load
-				waiting := l.workpool.Waiting()
-				if waiting > 0 {
-					l.workpool.Tune(waiting + 1) // Increase the worker pool size if there are waiting tasks
-				} else {
-					l.workpool.Tune(l.conf.PoolSize) // Reset to the configured pool size
-				}
+				// Tune the worker pool size based on the number of waiting tasks
+				l.workerPoolTune()
 			}
 		}
 	}()
@@ -203,6 +203,36 @@ func (l *Loop) Start() {
 		l.normalProc.Close()
 	case LoopTypeSync:
 		l.frameProc.Close()
+	}
+}
+
+// workerPoolTune dynamically adjusts the size of the worker pool based on the number of waiting tasks.
+// It expands the pool size if there are many waiting tasks and shrinks it if there are few waiting tasks.
+func (l *Loop) workerPoolTune() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// If the worker pool is closed, do not tune it
+	if l.workpool.IsClosed() {
+		return
+	}
+	waiting := l.workpool.Waiting()
+
+	// If there are many waiting tasks, expand the worker pool size
+	// but ensure it does not exceed the maximum pool size
+	if waiting > expandThreshold && l.curPoolSize < l.conf.MaxPoolSize {
+		newSize := min(l.curPoolSize+(waiting/2), l.conf.MaxPoolSize)
+		l.workpool.Tune(newSize) // Increase the worker pool size if there are waiting tasks
+		l.curPoolSize = newSize
+		return
+	}
+
+	// If there are few waiting tasks, shrink the worker pool size
+	// but ensure it does not go below the minimum pool size
+	if waiting < shrinkThreshold && l.curPoolSize > l.conf.MinPoolSize {
+		newSize := max(l.curPoolSize-(waiting/2), l.conf.MinPoolSize)
+		l.workpool.Tune(newSize) // Decrease the worker pool size if there are few waiting tasks
+		l.curPoolSize = newSize
 	}
 }
 
@@ -319,22 +349,23 @@ func (l *Loop) processFrame(execEmpty bool) {
 
 			frame.Inputs[playerID] = messages[0]
 			l.inFrameQueue[playerID] = messages[1:]
-		} else {
-			if !l.conf.DefaultFill {
-				// Ensure the player's input map is cleared if no messages are left
-				delete(l.current.Inputs, playerID)
-				// If the queue is empty, remove the player from the inFrameQueue
-				delete(l.inFrameQueue, playerID)
-				continue
-			}
+			continue
+		}
 
-			// If the queue is empty, fill it with default values
-			frame.Inputs[playerID] = Message{
-				PlayerID:   playerID,
-				SequenceID: l.current.Inputs[playerID].SequenceID + 1,
-				Timestamp:  time.Now(),
-				Data:       nil, // Default fill data
-			}
+		if !l.conf.DefaultFill {
+			// Ensure the player's input map is cleared if no messages are left
+			delete(l.current.Inputs, playerID)
+			// If the queue is empty, remove the player from the inFrameQueue
+			delete(l.inFrameQueue, playerID)
+			continue
+		}
+
+		// If the queue is empty, fill it with default values
+		frame.Inputs[playerID] = Message{
+			PlayerID:   playerID,
+			SequenceID: l.current.Inputs[playerID].SequenceID + 1,
+			Timestamp:  time.Now(),
+			Data:       nil, // Default fill data
 		}
 	}
 
@@ -461,7 +492,10 @@ func defaultConf(conf *LoopConf) {
 	if conf.HeartbeatFrequency == 0 {
 		conf.HeartbeatFrequency = heartbeatFrequency
 	}
-	if conf.PoolSize == 0 {
-		conf.PoolSize = poolSize
+	if conf.MinPoolSize == 0 {
+		conf.MinPoolSize = poolSize
+	}
+	if conf.MaxPoolSize == 0 {
+		conf.MaxPoolSize = math.MaxInt
 	}
 }
