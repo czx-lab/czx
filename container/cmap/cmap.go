@@ -101,6 +101,8 @@ func (c *CMap[K, V]) shrinkUnlocked() {
 	c.data = newData
 }
 
+// Shrink reduces the size of the internal map to optimize memory usage.
+// It is called to clean up unused memory after many deletions.
 func (c *CMap[K, V]) Shrink() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -118,6 +120,13 @@ func (c *CMap[K, V]) DeleteIf(f func(K, V) bool) {
 	for k, v := range c.data {
 		if f(k, v) {
 			delete(c.data, k)
+
+			c.recordWinLen()
+
+			avg := c.avgWinLen()
+			if avg > 0 && len(c.data) > 0 && len(c.data) > avg*2 {
+				c.shrinkUnlocked()
+			}
 		}
 	}
 }
