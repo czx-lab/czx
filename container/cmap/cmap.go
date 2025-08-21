@@ -1,18 +1,49 @@
 package cmap
 
 import (
+	"maps"
 	"sync"
 )
 
+// Default window size for tracking the length of the map over time.
+const defaultWinSize = 16
+
 type CMap[K comparable, V any] struct {
-	mu   sync.RWMutex
-	data map[K]V
+	mu      sync.RWMutex
+	data    map[K]V
+	winLens []int
+	winIdx  int
+	winSize int
 }
 
 func New[K comparable, V any]() *CMap[K, V] {
 	return &CMap[K, V]{
-		data: make(map[K]V),
+		data:    make(map[K]V),
+		winLens: make([]int, defaultWinSize),
+		winSize: defaultWinSize,
 	}
+}
+
+func (c *CMap[K, V]) WithWinSize(size int) *CMap[K, V] {
+	if size <= 0 {
+		size = defaultWinSize
+	}
+	c.winSize = size
+	c.winLens = make([]int, size)
+	return c
+}
+
+func (c *CMap[K, V]) recordWinLen() {
+	c.winLens[c.winIdx%c.winSize] = len(c.data)
+	c.winIdx++
+}
+
+func (c *CMap[K, V]) avgWinLen() int {
+	sum := 0
+	for _, v := range c.winLens {
+		sum += v
+	}
+	return sum / c.winSize
 }
 
 // Has checks if the map contains the given key.
@@ -49,6 +80,32 @@ func (c *CMap[K, V]) Delete(key K) {
 	defer c.mu.Unlock()
 
 	delete(c.data, key)
+
+	c.recordWinLen()
+
+	avg := c.avgWinLen()
+	if avg > 0 && len(c.data) > 0 && len(c.data) > avg*2 {
+		c.shrinkUnlocked()
+	}
+}
+
+// shrinkUnlocked shrinks the internal map to reduce memory usage.
+// It is called when the average length of the map is significantly smaller than the current size.
+func (c *CMap[K, V]) shrinkUnlocked() {
+	if len(c.data) == 0 {
+		c.data = make(map[K]V)
+		return
+	}
+	newData := make(map[K]V, len(c.data))
+	maps.Copy(newData, c.data)
+	c.data = newData
+}
+
+func (c *CMap[K, V]) Shrink() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.shrinkUnlocked()
 }
 
 // DeleteIf removes key-value pairs that match the provided condition.
