@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/czx-lab/czx/container/cmap"
 	"github.com/czx-lab/czx/frame"
 )
 
@@ -42,7 +43,7 @@ type (
 		running bool
 		// players is used to keep track of the players in the room
 		// and to prevent multiple calls to Join()
-		players map[string]struct{}
+		players *cmap.CMap[string, struct{}]
 		// rpcClient is used to send messages to the room
 		// and receive messages from the room
 		processor RoomProcessor
@@ -56,7 +57,7 @@ func NewRoom(opt RoomConf) *Room {
 
 	room := &Room{
 		opt:     opt,
-		players: make(map[string]struct{}),
+		players: cmap.New[string, struct{}](),
 	}
 
 	return room
@@ -122,21 +123,21 @@ func (r *Room) Join(playerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, ok := r.players[playerID]; ok {
+	if r.players.Has(playerID) {
 		return ErrMaxPlayer
 	}
-	if len(r.players) >= r.opt.MaxPlayer {
+	if r.players.Len() >= r.opt.MaxPlayer {
 		return ErrRoomFull
 	}
 
-	r.players[playerID] = struct{}{}
+	r.players.Set(playerID, struct{}{})
 
 	if r.processor == nil {
 		return nil
 	}
 
 	if err := r.processor.Join(playerID); err != nil {
-		delete(r.players, playerID)
+		r.players.Delete(playerID)
 		// If the player is already in the room, remove it
 		return err
 	}
@@ -150,7 +151,7 @@ func (r *Room) Leave(playerID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	delete(r.players, playerID)
+	r.players.Delete(playerID)
 	if r.processor == nil {
 		return nil
 	}
@@ -227,7 +228,7 @@ func (r *Room) Num() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return len(r.players)
+	return r.players.Len()
 }
 
 // Check if the player is in the room
@@ -236,8 +237,7 @@ func (r *Room) Has(playerID string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, ok := r.players[playerID]
-	return ok
+	return r.players.Has(playerID)
 }
 
 // Returns a slice of player IDs in the room
@@ -245,14 +245,15 @@ func (r *Room) Players() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	if len(r.players) == 0 {
+	if r.players.Len() == 0 {
 		return nil
 	}
 
 	var players []string
-	for player := range r.players {
-		players = append(players, player)
-	}
+	r.players.Iterator(func(playerID string, _ struct{}) bool {
+		players = append(players, playerID)
+		return true
+	})
 
 	return players
 }

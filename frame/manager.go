@@ -3,6 +3,8 @@ package frame
 import (
 	"errors"
 	"sync"
+
+	"github.com/czx-lab/czx/container/cmap"
 )
 
 var (
@@ -13,12 +15,12 @@ var (
 type LoopManager struct {
 	wg    sync.WaitGroup
 	mu    sync.RWMutex
-	loops map[string]*Loop
+	loops *cmap.CMap[string, *Loop]
 }
 
 func NewManager() *LoopManager {
 	return &LoopManager{
-		loops: make(map[string]*Loop),
+		loops: cmap.New[string, *Loop](),
 	}
 }
 
@@ -28,11 +30,11 @@ func (lm *LoopManager) Add(id string, loop *Loop) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	if _, exists := lm.loops[id]; exists {
+	if lm.loops.Has(id) {
 		return ErrLoopExists
 	}
 
-	lm.loops[id] = loop
+	lm.loops.Set(id, loop)
 
 	lm.wg.Add(1)
 	go func() {
@@ -51,7 +53,7 @@ func (lm *LoopManager) Remove(id string) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
-	loop, exists := lm.loops[id]
+	loop, exists := lm.loops.Get(id)
 	if !exists {
 		return ErrLoopNotFound
 	}
@@ -60,7 +62,7 @@ func (lm *LoopManager) Remove(id string) error {
 	loop.Stop()
 
 	// Remove the loop from the manager
-	delete(lm.loops, id)
+	lm.loops.Delete(id)
 
 	return nil
 }
@@ -71,7 +73,7 @@ func (lm *LoopManager) Get(id string) (*Loop, error) {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	loop, exists := lm.loops[id]
+	loop, exists := lm.loops.Get(id)
 	if !exists {
 		return nil, ErrLoopNotFound
 	}
@@ -85,10 +87,11 @@ func (lm *LoopManager) Loops() []*Loop {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	loops := make([]*Loop, 0, len(lm.loops))
-	for _, loop := range lm.loops {
+	loops := make([]*Loop, 0, lm.loops.Len())
+	lm.loops.Iterator(func(_ string, loop *Loop) bool {
 		loops = append(loops, loop)
-	}
+		return true
+	})
 
 	return loops
 }
@@ -99,8 +102,7 @@ func (lm *LoopManager) Has(id string) bool {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	_, exists := lm.loops[id]
-	return exists
+	return lm.loops.Has(id)
 }
 
 // Count returns the number of loops managed by the LoopManager.
@@ -109,7 +111,7 @@ func (lm *LoopManager) Count() int {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	return len(lm.loops)
+	return lm.loops.Len()
 }
 
 // ALLID returns a slice of all loop IDs managed by the LoopManager.
@@ -118,10 +120,11 @@ func (lm *LoopManager) ALLID() []string {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	ids := make([]string, 0, len(lm.loops))
-	for id := range lm.loops {
-		ids = append(ids, id)
-	}
+	ids := make([]string, 0, lm.loops.Len())
+	lm.loops.Iterator(func(s string, _ *Loop) bool {
+		ids = append(ids, s)
+		return true
+	})
 
 	return ids
 }
@@ -132,12 +135,13 @@ func (lm *LoopManager) Stop() {
 	defer lm.mu.Unlock()
 
 	// Stop all loops
-	for _, loop := range lm.loops {
-		loop.Stop()
-	}
+	lm.loops.Iterator(func(s string, l *Loop) bool {
+		l.Stop()
+		return true
+	})
 
 	// Clear the loops map
-	lm.loops = make(map[string]*Loop)
+	lm.loops.Clear()
 	// Wait for all loops to finish
 	lm.wg.Wait()
 }
