@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 )
 
 var (
@@ -31,10 +32,11 @@ type (
 	}
 )
 
-func NewPlayerManager(conf *ManagerConf) *PlayerManager {
+func NewPlayerManager(conf *ManagerConf, r recycler.Recycler) *PlayerManager {
+	ps := cmap.New[string, *Player]()
 	return &PlayerManager{
 		conf:    conf,
-		players: cmap.New[string, *Player](),
+		players: ps.WithRecycler(r),
 	}
 }
 

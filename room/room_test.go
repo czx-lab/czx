@@ -100,7 +100,7 @@ func TestRoom(t *testing.T) {
 
 func TestRoomManager(t *testing.T) {
 	t.Run("room manager test", func(t *testing.T) {
-		rm := NewRoomManager()
+		rm := NewRoomManager(nil)
 		room := NewRoom(RoomConf{
 			RoomID: "2",
 		})

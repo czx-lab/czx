@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/xlog"
 
 	"go.uber.org/zap"
@@ -22,9 +23,10 @@ type RoomManager struct {
 }
 
 // NewRoomManager creates a new RoomManager instance.
-func NewRoomManager() *RoomManager {
+func NewRoomManager(r recycler.Recycler) *RoomManager {
+	roms := cmap.New[string, *Room]()
 	return &RoomManager{
-		rooms: cmap.New[string, *Room](),
+		rooms: roms.WithRecycler(r),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 )
 
 var (
@@ -18,9 +19,10 @@ type LoopManager struct {
 	loops *cmap.CMap[string, *Loop]
 }
 
-func NewManager() *LoopManager {
+func NewManager(r recycler.Recycler) *LoopManager {
+	lops := cmap.New[string, *Loop]()
 	return &LoopManager{
-		loops: cmap.New[string, *Loop](),
+		loops: lops.WithRecycler(r),
 	}
 }
 
