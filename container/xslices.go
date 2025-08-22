@@ -7,8 +7,6 @@ import (
 	"github.com/czx-lab/czx/container/recycler"
 )
 
-const defaultWinSize = 16
-
 type Xslices[T comparable] struct {
 	mu       sync.RWMutex
 	data     []T
