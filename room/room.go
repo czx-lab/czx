@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/frame"
 )
 
@@ -52,12 +53,13 @@ type (
 	}
 )
 
-func NewRoom(opt RoomConf) *Room {
+func NewRoom(opt RoomConf, r recycler.Recycler) *Room {
 	defaultConf(&opt)
 
+	ps := cmap.New[string, struct{}]()
 	room := &Room{
 		opt:     opt,
-		players: cmap.New[string, struct{}](),
+		players: ps.WithRecycler(r),
 	}
 
 	return room

@@ -51,7 +51,7 @@ var _ frame.NormalProcessor = (*normalProcessorMock)(nil)
 
 func TestRoom(t *testing.T) {
 	t.Run("room test", func(t *testing.T) {
-		room := NewRoom(RoomConf{})
+		room := NewRoom(RoomConf{}, nil)
 		room.WithProcessor(&roomprocessor{})
 		loop, _ := frame.NewLoop(frame.LoopConf{})
 		loop.WithNormalProc(&normalProcessorMock{})
@@ -103,7 +103,7 @@ func TestRoomManager(t *testing.T) {
 		rm := NewRoomManager(nil)
 		room := NewRoom(RoomConf{
 			RoomID: "2",
-		})
+		}, nil)
 		room.WithProcessor(&roomprocessor{})
 
 		loop, _ := frame.NewLoop(frame.LoopConf{})
@@ -112,7 +112,7 @@ func TestRoomManager(t *testing.T) {
 
 		room1 := NewRoom(RoomConf{
 			RoomID: "3",
-		})
+		}, nil)
 		room1.WithProcessor(&roomprocessor{})
 
 		if err := rm.Add(room); err != nil {
