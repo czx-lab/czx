@@ -10,8 +10,8 @@ import (
 )
 
 type Data struct {
-	ID      int
 	Content string
+	ID      int
 }
 
 type Recycler struct{}
@@ -20,9 +20,10 @@ var gc bool
 
 // Shrink implements recycler.Recycler.
 func (r *Recycler) Shrink(len_ int, cap_ int) bool {
-	ok := cap_ > len_ && cap_ > len_+50000
+	// return false
+	ok := cap_ > len_ && cap_ > len_+1000000
 	if ok {
-		fmt.Println("Shrink called:", ok, "Len:", len_, "Cap:", cap_)
+		fmt.Println("@@@@@@@@@@@@@@Shrink called:", ok, "Len:", len_, "Cap:", cap_)
 	}
 	gc = ok
 	return ok
@@ -46,7 +47,7 @@ func TestCmapMemoStats(t *testing.T) {
 	for i := 0; i < 10000000; i++ {
 		d := pool.Get().(*Data)
 		d.ID = i
-		d.Content = "content"
+		d.Content = "contentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontentcontent"
 		q.Set(i, d)
 	}
 
@@ -68,7 +69,7 @@ func TestCmapMemoStats(t *testing.T) {
 		}
 	}
 
-	q.Shrink()
+	// q.Shrink()
 	runtime.GC()
 	runtime.ReadMemStats(&m)
 	fmt.Printf("After Shrink: Alloc = %v MB, Len = %d\n", m.Alloc/(1024*1024), q.Len())

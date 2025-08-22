@@ -20,7 +20,9 @@ type Recycler struct{}
 // Shrink implements recycler.Recycler.
 func (r *Recycler) Shrink(len_ int, cap_ int) bool {
 	ok := cap_ > len_ && cap_ > len_+10
-	fmt.Println("Shrink called:", ok, "Len:", len_, "Cap:", cap_)
+	if ok {
+		fmt.Println("Shrink called:", ok, "Len:", len_, "Cap:", cap_)
+	}
 	return ok
 }
 
