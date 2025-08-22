@@ -33,7 +33,7 @@ type (
 )
 
 func NewPlayerManager(conf *ManagerConf, r recycler.Recycler) *PlayerManager {
-	ps := cmap.New[string, *Player]().WithRecycler(r)
+	ps := cmap.New[string, *Player]()
 	return &PlayerManager{
 		conf:    conf,
 		players: ps.WithRecycler(r),
