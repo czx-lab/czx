@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/container/cqueue"
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/xlog"
 )
 
@@ -28,6 +29,7 @@ type (
 		queueHandlers map[string][]*cqueue.Queue[any]
 		capacity      int32
 		typ           EvtType
+		recycler      recycler.Recycler
 	}
 )
 
@@ -42,12 +44,12 @@ var (
 )
 
 // LoadCapacity sets the default capacity for event channels.
-func LoadCapacity(cap int, typ EvtType) {
+func LoadCapacity(cap int, typ EvtType, r recycler.Recycler) {
 	atomic.StoreInt32(&defaultCapacity, int32(cap))
 	busMu.Lock()
 	defer busMu.Unlock()
 
-	DefaultBus = NewEventBus(defaultCapacity, typ)
+	DefaultBus = NewEventBus(defaultCapacity, typ).WithRecycler(r)
 }
 
 // NewEventBus creates a new EventBus instance.
@@ -59,6 +61,11 @@ func NewEventBus(cap int32, typ EvtType) *EventBus {
 		capacity:      cap,
 		typ:           typ,
 	}
+}
+
+func (eb *EventBus) WithRecycler(r recycler.Recycler) *EventBus {
+	eb.recycler = r
+	return eb
 }
 
 // Type returns the name of the event bus.
@@ -101,7 +108,7 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 // It allows for processing messages in a queue-like manner, where messages are processed in the order they are received.
 func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 	eb.mu.Lock()
-	queue := cqueue.NewQueue[any](int(eb.capacity))
+	queue := cqueue.NewQueue[any](int(eb.capacity)).WithRecycler(eb.recycler)
 	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 	eb.mu.Unlock()
 
@@ -126,7 +133,7 @@ func (eb *EventBus) SubscribeOnQueue(event string) *cqueue.Queue[any] {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	queue := cqueue.NewQueue[any](int(eb.capacity))
+	queue := cqueue.NewQueue[any](int(eb.capacity)).WithRecycler(eb.recycler)
 	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 
 	return queue
