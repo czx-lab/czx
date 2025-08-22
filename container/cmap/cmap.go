@@ -88,7 +88,14 @@ func (c *CMap[K, V]) Shrink() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.shrink()
+	if len(c.data) == 0 {
+		c.data = make(map[K]V)
+		return
+	}
+	newData := make(map[K]V, len(c.data))
+	maps.Copy(newData, c.data)
+	c.data = newData
+	c.maxLen = len(c.data)
 }
 
 // DeleteIf removes key-value pairs that match the provided condition.

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 )
 
 // Memo is a simple in-memory cache with expiration.
@@ -22,9 +23,10 @@ type (
 )
 
 // NewMemo creates a new Memo instance.
-func NewMemo(interval time.Duration) *Memo {
+func NewMemo(interval time.Duration, r recycler.Recycler) *Memo {
+	cdata := cmap.New[string, *CacheItem]()
 	mc := &Memo{
-		data:     cmap.New[string, *CacheItem](),
+		data:     cdata.WithRecycler(r),
 		done:     make(chan struct{}),
 		interval: interval,
 	}
