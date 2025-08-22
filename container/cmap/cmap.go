@@ -3,47 +3,26 @@ package cmap
 import (
 	"maps"
 	"sync"
+
+	"github.com/czx-lab/czx/container/recycler"
 )
 
-// Default window size for tracking the length of the map over time.
-const defaultWinSize = 16
-
 type CMap[K comparable, V any] struct {
-	mu      sync.RWMutex
-	data    map[K]V
-	winLens []int
-	winIdx  int
-	winSize int
+	mu       sync.RWMutex
+	data     map[K]V
+	maxLen   int               // Maximum length of the map
+	recycler recycler.Recycler // Optional recycler for memory management
 }
 
 func New[K comparable, V any]() *CMap[K, V] {
 	return &CMap[K, V]{
-		data:    make(map[K]V),
-		winLens: make([]int, defaultWinSize),
-		winSize: defaultWinSize,
+		data: make(map[K]V),
 	}
 }
 
-func (c *CMap[K, V]) WithWinSize(size int) *CMap[K, V] {
-	if size <= 0 {
-		size = defaultWinSize
-	}
-	c.winSize = size
-	c.winLens = make([]int, size)
+func (c *CMap[K, V]) WithRecycler(r recycler.Recycler) *CMap[K, V] {
+	c.recycler = r
 	return c
-}
-
-func (c *CMap[K, V]) recordWinLen() {
-	c.winLens[c.winIdx%c.winSize] = len(c.data)
-	c.winIdx++
-}
-
-func (c *CMap[K, V]) avgWinLen() int {
-	sum := 0
-	for _, v := range c.winLens {
-		sum += v
-	}
-	return sum / c.winSize
 }
 
 // Has checks if the map contains the given key.
@@ -80,18 +59,19 @@ func (c *CMap[K, V]) Delete(key K) {
 	defer c.mu.Unlock()
 
 	delete(c.data, key)
-
-	c.recordWinLen()
-
-	avg := c.avgWinLen()
-	if avg > 0 && len(c.data) > 0 && len(c.data) > avg*2 {
-		c.shrinkUnlocked()
-	}
+	c.shrink()
 }
 
 // shrinkUnlocked shrinks the internal map to reduce memory usage.
 // It is called when the average length of the map is significantly smaller than the current size.
-func (c *CMap[K, V]) shrinkUnlocked() {
+func (c *CMap[K, V]) shrink() {
+	if c.recycler == nil {
+		return
+	}
+
+	if !c.recycler.Shrink(len(c.data), c.maxLen) {
+		return
+	}
 	if len(c.data) == 0 {
 		c.data = make(map[K]V)
 		return
@@ -99,6 +79,7 @@ func (c *CMap[K, V]) shrinkUnlocked() {
 	newData := make(map[K]V, len(c.data))
 	maps.Copy(newData, c.data)
 	c.data = newData
+	c.maxLen = len(c.data)
 }
 
 // Shrink reduces the size of the internal map to optimize memory usage.
@@ -107,7 +88,7 @@ func (c *CMap[K, V]) Shrink() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.shrinkUnlocked()
+	c.shrink()
 }
 
 // DeleteIf removes key-value pairs that match the provided condition.
@@ -120,15 +101,10 @@ func (c *CMap[K, V]) DeleteIf(f func(K, V) bool) {
 	for k, v := range c.data {
 		if f(k, v) {
 			delete(c.data, k)
-
-			c.recordWinLen()
-
-			avg := c.avgWinLen()
-			if avg > 0 && len(c.data) > 0 && len(c.data) > avg*2 {
-				c.shrinkUnlocked()
-			}
 		}
 	}
+
+	c.shrink()
 }
 
 // Iterator iterates over all key-value pairs in the map,
@@ -185,12 +161,25 @@ func (c *CMap[K, V]) Len() int {
 	return len(c.data)
 }
 
+// MaxLen returns the maximum length of the map.
+// It returns 0 if the map is nil or empty.
+func (c *CMap[K, V]) MaxLen() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	// Return the maximum length of the map
+	return c.maxLen
+}
+
 // Set adds or updates the value for the given key.
 // If the key already exists, it updates the value.
 func (c *CMap[K, V]) Set(key K, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.data[key] = value
+	if len(c.data) > c.maxLen {
+		c.maxLen = len(c.data)
+	}
 }
 
 // Clear removes all key-value pairs from the map.
@@ -201,4 +190,5 @@ func (c *CMap[K, V]) Clear() {
 
 	// Clear the map
 	c.data = make(map[K]V)
+	c.maxLen = 0
 }

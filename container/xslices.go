@@ -3,53 +3,37 @@ package container
 import (
 	"slices"
 	"sync"
+
+	"github.com/czx-lab/czx/container/recycler"
 )
 
 const defaultWinSize = 16
 
 type Xslices[T comparable] struct {
-	mu     sync.RWMutex
-	data   []T
-	wins   []int
-	winIdx int
-	winLen int
+	mu       sync.RWMutex
+	data     []T
+	recycler recycler.Recycler
 }
 
 func New[T comparable]() *Xslices[T] {
 	return &Xslices[T]{
-		data:   make([]T, 0),
-		winLen: defaultWinSize,
-		wins:   make([]int, defaultWinSize),
+		data: make([]T, 0),
 	}
 }
 
-func (xs *Xslices[T]) WithWinLen() *Xslices[T] {
-	xs.mu.Lock()
-	defer xs.mu.Unlock()
-
-	xs.winLen = defaultWinSize
-	xs.wins = make([]int, defaultWinSize)
+func (xs *Xslices[T]) WithRecycler(r recycler.Recycler) *Xslices[T] {
+	xs.recycler = r
 	return xs
 }
 
-// recordLenWindow is used to record the length of the data slice
-// in a circular manner. It updates the current index in the wins slice
-// and increments the index for the next recording.
-func (xs *Xslices[T]) recordLenWindow() {
-	xs.wins[xs.winIdx%xs.winLen] = len(xs.data)
-	xs.winIdx++
-}
-
-// avgLenWindow calculates the average length of the data slice
-// over the last recorded lengths in the wins slice.
-// It sums up the lengths and divides by the number of recordings.
-// This provides a smoothed view of the data slice's length over time.
-func (xs *Xslices[T]) avgLenWindow() int {
-	sum := 0
-	for _, v := range xs.wins {
-		sum += v
+func (xs *Xslices[T]) shrink() {
+	if xs.recycler == nil {
+		return
 	}
-	return sum / xs.winLen
+
+	if xs.recycler.Shrink(len(xs.data), cap(xs.data)) {
+		xs.data = slices.Clip(xs.data) // Shrink the slice to fit its length
+	}
 }
 
 // Append adds new items to the Xslices data slice.
@@ -61,8 +45,6 @@ func (xs *Xslices[T]) Append(items ...T) {
 	defer xs.mu.Unlock()
 
 	xs.data = append(xs.data, items...)
-
-	xs.recordLenWindow()
 }
 
 // Get retrieves an item from the Xslices data slice by index.
@@ -89,18 +71,7 @@ func (xs *Xslices[T]) Remove(index int) bool {
 	}
 	xs.data = slices.Delete(xs.data, index, index+1)
 
-	xs.recordLenWindow()
-
-	if len(xs.data) == 0 {
-		xs.data = nil
-		return true
-	}
-
-	avg := xs.avgLenWindow()
-	if avg > 0 && cap(xs.data) > avg*2 && len(xs.data) > 0 {
-		xs.data = slices.Clip(xs.data)
-	}
-
+	xs.shrink()
 	return true
 }
 
@@ -153,17 +124,7 @@ func (xs *Xslices[T]) DeleteIf(fn func(item T) bool) {
 		}
 	}
 
-	xs.recordLenWindow()
-
-	if len(xs.data) == 0 {
-		xs.data = nil
-		return
-	}
-
-	avg := xs.avgLenWindow()
-	if avg > 0 && cap(xs.data) > avg*2 && len(xs.data) > 0 {
-		xs.data = slices.Clip(xs.data)
-	}
+	xs.shrink()
 }
 
 // Iterator iterates over the Xslices data slice,

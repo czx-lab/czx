@@ -5,10 +5,9 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/utils/xslices"
 )
-
-const defaultWinSize = 16
 
 // Generic queue type
 // Queue is a thread-safe queue that can hold elements of any type.
@@ -17,34 +16,19 @@ type Queue[T any] struct {
 	mu          sync.Mutex
 	queue       []T
 	maxCapacity int
-	// wins is a circular buffer that records the length of the queue over time.
-	// It helps in tracking the average length of the queue.
-	wins []int
-	// Index for the current window in the wins array
-	winIdx int
-	// Length of the wins array, used for circular indexing
-	winLen int
+	recycler    recycler.Recycler // Optional recycler for memory management
 }
 
 // NewQueue creates a new instance of Queue for the specified type T.
 func NewQueue[T any](maxcap int) *Queue[T] {
 	return &Queue[T]{
 		maxCapacity: maxcap,
-		winLen:      defaultWinSize,
-		wins:        make([]int, defaultWinSize),
 	}
 }
 
-// WithWinLen sets the size of the window for recording the length of the queue.
-// It initializes the `wins` slice to the specified size.
-// This allows the queue to track its length over time, which can be useful for monitoring and
-// performance analysis.
-// The `winLen` parameter specifies how many past lengths to keep track of.
-// If the size is less than or equal to zero, it defaults to 16.
-// This method returns the queue instance itself to allow for method chaining.
-func (q *Queue[T]) WithWinLen(size int) *Queue[T] {
-	q.winLen = size
-	q.wins = make([]int, size)
+// WithRecycler sets a recycler for the queue.
+func (q *Queue[T]) WithRecycler(r recycler.Recycler) *Queue[T] {
+	q.recycler = r
 	return q
 }
 
@@ -54,6 +38,7 @@ func (q *Queue[T]) DeleteFunc(fn func(T) bool) bool {
 	defer q.mu.Unlock()
 
 	if len(q.queue) == 0 {
+		q.shrink()
 		return false
 	}
 
@@ -61,7 +46,18 @@ func (q *Queue[T]) DeleteFunc(fn func(T) bool) bool {
 		return fn(item)
 	})
 
+	q.shrink()
 	return true
+}
+
+func (q *Queue[T]) shrink() {
+	if q.recycler == nil {
+		return
+	}
+
+	if q.recycler.Shrink(len(q.queue), cap(q.queue)) {
+		q.queue = slices.Clip(q.queue) // Shrink the slice to fit its length
+	}
 }
 
 // Search searches for an element in the queue using a custom function.
@@ -99,29 +95,7 @@ func (q *Queue[T]) Push(data ...T) error {
 	}
 
 	q.queue = append(q.queue, data...)
-
-	q.recordLenWindow()
 	return nil
-}
-
-// RecordLenWindow records the current length of the queue in a circular buffer.
-// It updates the `wins` array with the current length of the queue at the current index.
-// The `winIdx` is incremented to point to the next index for the next recording.
-func (q *Queue[T]) recordLenWindow() {
-	q.wins[q.winIdx%q.winLen] = len(q.queue)
-	q.winIdx++
-}
-
-// AvgLenWindow calculates the average length of the queue over the last 16 recordings.
-// It sums up the lengths recorded in the `wins` array and divides by the number of recordings.
-// This provides a smoothed view of the queue's length over time, helping to understand its usage patterns.
-// The average length can be useful for monitoring and performance analysis.
-func (q *Queue[T]) avgLenWindow() int {
-	sum := 0
-	for _, v := range q.wins {
-		sum += v
-	}
-	return sum / q.winLen
 }
 
 // Pop removes and returns the first element from the queue.
@@ -133,8 +107,6 @@ func (q *Queue[T]) Pop() (T, bool) {
 
 	if len(q.queue) == 0 {
 		q.queue = nil
-
-		q.recordLenWindow()
 		var zero T
 		return zero, false
 	}
@@ -142,19 +114,12 @@ func (q *Queue[T]) Pop() (T, bool) {
 	data := q.queue[0]
 	q.queue = q.queue[1:]
 
-	q.recordLenWindow()
-
 	if len(q.queue) == 0 {
 		q.queue = nil // Clear the queue if it becomes empty
+		return data, true
 	}
 
-	avg := q.avgLenWindow()
-	if avg > 0 && cap(q.queue) > avg*2 && len(q.queue) > 0 {
-		newQueue := make([]T, len(q.queue))
-		copy(newQueue, q.queue)
-		q.queue = newQueue
-	}
-
+	q.shrink()
 	return data, true
 }
 
@@ -200,7 +165,6 @@ func (q *Queue[T]) PopBatch(n int) ([]T, bool) {
 
 	if len(q.queue) == 0 {
 		q.queue = nil
-		q.recordLenWindow()
 		return nil, false
 	}
 
@@ -211,19 +175,12 @@ func (q *Queue[T]) PopBatch(n int) ([]T, bool) {
 	data := q.queue[:n]
 	q.queue = q.queue[n:]
 
-	q.recordLenWindow()
-
 	if len(q.queue) == 0 {
 		q.queue = nil // Clear the queue if it becomes empty
+		return data, true
 	}
 
-	avg := q.avgLenWindow()
-	if avg > 0 && cap(q.queue) > avg*2 && len(q.queue) > 0 {
-		newQueue := make([]T, len(q.queue))
-		copy(newQueue, q.queue)
-		q.queue = newQueue
-	}
-
+	q.shrink()
 	return data, true
 }
 
@@ -251,7 +208,5 @@ func (q *Queue[T]) Shrink() {
 		return // No need to shrink if capacity is already equal to length
 	}
 
-	newQueue := make([]T, len(q.queue))
-	copy(newQueue, q.queue)
-	q.queue = newQueue
+	q.queue = slices.Clip(q.queue)
 }
