@@ -35,7 +35,7 @@ func TestPlayer(t *testing.T) {
 		t.Log(p.ID())
 		t.Log(p.Agent())
 
-		m := NewPlayerManager(&ManagerConf{})
+		m := NewPlayerManager(&ManagerConf{}, nil)
 		m.Add(p)
 		t.Log(m.Player("player_id_1"))
 		m.Start()

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/xlog"
 
 	"go.uber.org/zap"
@@ -17,13 +19,14 @@ var (
 type RoomManager struct {
 	wg    sync.WaitGroup
 	mu    sync.RWMutex
-	rooms map[string]*Room
+	rooms *cmap.CMap[string, *Room]
 }
 
 // NewRoomManager creates a new RoomManager instance.
-func NewRoomManager() *RoomManager {
+func NewRoomManager(r recycler.Recycler) *RoomManager {
+	roms := cmap.New[string, *Room]()
 	return &RoomManager{
-		rooms: make(map[string]*Room),
+		rooms: roms.WithRecycler(r),
 	}
 }
 
@@ -32,11 +35,11 @@ func (rm *RoomManager) Add(room *Room) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	if _, exists := rm.rooms[room.ID()]; exists {
+	if rm.rooms.Has(room.ID()) {
 		return ErrRoomExists
 	}
 
-	rm.rooms[room.ID()] = room
+	rm.rooms.Set(room.ID(), room)
 
 	rm.wg.Add(1)
 	go func() {
@@ -56,15 +59,13 @@ func (rm *RoomManager) Remove(roomID string) error {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
-	room, exists := rm.rooms[roomID]
+	room, exists := rm.rooms.Get(roomID)
 	if !exists {
 		return ErrRoomNotFound
 	}
 
 	room.Stop()
-
-	delete(rm.rooms, roomID)
-
+	rm.rooms.Delete(roomID)
 	return nil
 }
 
@@ -73,7 +74,7 @@ func (rm *RoomManager) Get(roomID string) (*Room, error) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	room, exists := rm.rooms[roomID]
+	room, exists := rm.rooms.Get(roomID)
 	if !exists {
 		return nil, ErrRoomNotFound
 	}
@@ -86,8 +87,7 @@ func (rm *RoomManager) Has(roomID string) bool {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	_, exists := rm.rooms[roomID]
-	return exists
+	return rm.rooms.Has(roomID)
 }
 
 // Num returns the number of rooms managed by the RoomManager.
@@ -95,7 +95,7 @@ func (rm *RoomManager) Num() int {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	return len(rm.rooms)
+	return rm.rooms.Len()
 }
 
 // Stop stops all rooms managed by the RoomManager.
@@ -105,12 +105,13 @@ func (rm *RoomManager) Stop() {
 	defer rm.mu.Unlock()
 
 	// Stop all rooms synchronously.
-	for _, room := range rm.rooms {
-		room.Stop()
-	}
+	rm.rooms.Iterator(func(s string, r *Room) bool {
+		r.Stop()
+		return true
+	})
 
 	// Clear the rooms map before waiting for all rooms to stop.
-	rm.rooms = make(map[string]*Room)
+	rm.rooms.Clear()
 
 	rm.wg.Wait()
 }
@@ -122,9 +123,10 @@ func (rm *RoomManager) Range(fn func(*Room)) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	for _, room := range rm.rooms {
-		fn(room)
-	}
+	rm.rooms.Iterator(func(_ string, r *Room) bool {
+		fn(r)
+		return true
+	})
 }
 
 // Number of players in the room
@@ -135,9 +137,10 @@ func (rm *RoomManager) RoomsPlayerNum() map[string]int {
 	defer rm.mu.RUnlock()
 
 	nums := make(map[string]int)
-	for _, room := range rm.rooms {
-		nums[room.ID()] = len(room.players)
-	}
+	rm.rooms.Iterator(func(s string, r *Room) bool {
+		nums[s] = r.Num()
+		return true
+	})
 
 	return nums
 }
@@ -147,10 +150,11 @@ func (rm *RoomManager) Rooms() []*Room {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	rooms := make([]*Room, 0, len(rm.rooms))
-	for _, room := range rm.rooms {
-		rooms = append(rooms, room)
-	}
+	rooms := make([]*Room, 0, rm.rooms.Len())
+	rm.rooms.Iterator(func(_ string, r *Room) bool {
+		rooms = append(rooms, r)
+		return true
+	})
 	return rooms
 }
 
@@ -159,7 +163,7 @@ func (rm *RoomManager) Players(roomId string) ([]string, error) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
-	room, ok := rm.rooms[roomId]
+	room, ok := rm.rooms.Get(roomId)
 	if !ok {
 		return nil, ErrRoomNotFound
 	}

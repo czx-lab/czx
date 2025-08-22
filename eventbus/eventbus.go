@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/czx-lab/czx/container/cqueue"
+	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/xlog"
 )
 
@@ -21,6 +22,7 @@ type EventBus struct {
 	chanHandlers  map[string][]chan any
 	queueHandlers map[string][]*cqueue.Queue[any]
 	capacity      int32
+	recycler      recycler.Recycler
 }
 
 var (
@@ -34,12 +36,12 @@ var (
 )
 
 // LoadCapacity sets the default capacity for event channels.
-func LoadCapacity(cap int) {
+func LoadCapacity(cap int, r recycler.Recycler) {
 	atomic.StoreInt32(&defaultCapacity, int32(cap))
 	busMu.Lock()
 	defer busMu.Unlock()
 
-	DefaultBus = NewEventBus(defaultCapacity)
+	DefaultBus = NewEventBus(defaultCapacity).WithRecycler(r)
 }
 
 // NewEventBus creates a new EventBus instance.
@@ -50,6 +52,11 @@ func NewEventBus(cap int32) *EventBus {
 		queueHandlers: make(map[string][]*cqueue.Queue[any]),
 		capacity:      cap,
 	}
+}
+
+func (eb *EventBus) WithRecycler(r recycler.Recycler) *EventBus {
+	eb.recycler = r
+	return eb
 }
 
 // SubscribeOnChannel creates a new channel for the given event and returns it.
@@ -87,7 +94,9 @@ func (eb *EventBus) Subscribe(event string, callback func(message any)) {
 // It allows for processing messages in a queue-like manner, where messages are processed in the order they are received.
 func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 	eb.mu.Lock()
-	eb.queueHandlers[event] = append(eb.queueHandlers[event], cqueue.NewQueue[any](int(eb.capacity)))
+	queue := cqueue.NewQueue[any](int(eb.capacity))
+	queue.WithRecycler(eb.recycler)
+	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 	eb.mu.Unlock()
 
 	go func() {
@@ -122,7 +131,7 @@ func (eb *EventBus) SubscribeOnQueue(event string) *cqueue.Queue[any] {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	queue := cqueue.NewQueue[any](int(eb.capacity))
+	queue := cqueue.NewQueue[any](int(eb.capacity)).WithRecycler(eb.recycler)
 	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 
 	return queue

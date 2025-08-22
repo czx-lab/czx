@@ -5,6 +5,9 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/czx-lab/czx/container/cmap"
+	"github.com/czx-lab/czx/container/recycler"
 )
 
 var (
@@ -20,7 +23,7 @@ type (
 	PlayerManager struct {
 		sync.RWMutex
 		conf    *ManagerConf
-		players map[string]*Player
+		players *cmap.CMap[string, *Player]
 	}
 	// BroadcastMessage is a struct that represents a message to be broadcasted to players.
 	BroadcastMessage struct {
@@ -29,10 +32,11 @@ type (
 	}
 )
 
-func NewPlayerManager(conf *ManagerConf) *PlayerManager {
+func NewPlayerManager(conf *ManagerConf, r recycler.Recycler) *PlayerManager {
+	ps := cmap.New[string, *Player]().WithRecycler(r)
 	return &PlayerManager{
 		conf:    conf,
-		players: make(map[string]*Player),
+		players: ps.WithRecycler(r),
 	}
 }
 
@@ -41,11 +45,10 @@ func NewPlayerManager(conf *ManagerConf) *PlayerManager {
 func (p *PlayerManager) Add(player *Player) error {
 	p.Lock()
 	defer p.Unlock()
-	if _, ok := p.players[player.ID()]; ok {
+	if p.players.Has(player.ID()) {
 		return ErrPlayerAdded
 	}
-
-	p.players[player.ID()] = player
+	p.players.Set(player.ID(), player)
 
 	// Register the player with the heartbeat manager
 	GlobalHeartbeat.Register(player)
@@ -58,7 +61,7 @@ func (p *PlayerManager) Player(id string) (*Player, error) {
 	p.RLock()
 	defer p.RUnlock()
 
-	player, ok := p.players[id]
+	player, ok := p.players.Get(id)
 	if !ok {
 		return nil, ErrPlayerNotFound
 	}
@@ -81,10 +84,11 @@ func (p *PlayerManager) Players() []*Player {
 	p.RLock()
 	defer p.RUnlock()
 
-	players := make([]*Player, 0, len(p.players))
-	for _, player := range p.players {
-		players = append(players, player)
-	}
+	players := make([]*Player, 0, p.players.Len())
+	p.players.Iterator(func(_ string, p *Player) bool {
+		players = append(players, p)
+		return true
+	})
 	return players
 }
 
@@ -93,7 +97,7 @@ func (p *PlayerManager) Num() int {
 	p.RLock()
 	defer p.RUnlock()
 
-	return len(p.players)
+	return p.players.Len()
 }
 
 // Delete removes a player from the player manager by ID. If the player does not exist, it returns an error.
@@ -101,11 +105,11 @@ func (p *PlayerManager) Delete(id string) error {
 	p.Lock()
 	defer p.Unlock()
 
-	if _, ok := p.players[id]; !ok {
+	if !p.players.Has(id) {
 		return ErrPlayerNotFound
 	}
 
-	delete(p.players, id)
+	p.players.Delete(id)
 	return nil
 }
 
@@ -114,18 +118,19 @@ func (p *PlayerManager) Remove(id string, destroy bool) error {
 	p.Lock()
 	defer p.Unlock()
 
-	if _, ok := p.players[id]; !ok {
+	if !p.players.Has(id) {
 		return ErrPlayerNotFound
 	}
 
 	// Unregister from heartbeat manager
+	player, _ := p.players.Get(id)
 	if destroy {
-		p.players[id].Destroy()
+		player.Destroy()
 	} else {
-		p.players[id].Close()
+		player.Close()
 	}
 
-	delete(p.players, id)
+	p.players.Delete(id)
 	return nil
 }
 
@@ -134,9 +139,10 @@ func (p *PlayerManager) Rang(fn func(*Player)) error {
 	p.RLock()
 	defer p.RUnlock()
 
-	for _, player := range p.players {
-		fn(player)
-	}
+	p.players.Iterator(func(_ string, p *Player) bool {
+		fn(p)
+		return true
+	})
 	return nil
 }
 
@@ -208,8 +214,10 @@ func (p *PlayerManager) Close() {
 	p.RLock()
 	defer p.RUnlock()
 
-	for _, player := range p.players {
+	p.players.Iterator(func(_ string, player *Player) bool {
 		player.Close()
-	}
-	p.players = make(map[string]*Player)
+		return true
+	})
+
+	p.players.Clear()
 }
