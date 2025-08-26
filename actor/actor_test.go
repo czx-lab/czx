@@ -61,7 +61,7 @@ func (c *consumerWorker) Exec(ctx context.Context) WorkerState {
 		return WorkerStopped
 	case data := <-c.mbox.Receive():
 		println("consumer", c.id, "received:", data)
-		dts := []int{2, 5, 10, 30, 35, 40}
+		dts := []int{2, 5, 10, 30, 35}
 		if c.ispanic && slices.Contains(dts, data) {
 			panic("consumer panic")
 		}
@@ -76,24 +76,24 @@ func TestActor(t *testing.T) {
 	t.Run("TestActor", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		mbox := NewMailbox[int](ctx, Cap(16))
-		producer := New(ctx, &producerWorker{
+		producer := New[int](ctx, &producerWorker{
 			mbox: mbox,
-		})
+		}).WithPID(NewPID("producer")).WithMailbox(mbox)
 
 		producer.Start()
 		defer producer.Stop()
 
-		consumer1 := New(ctx, &consumerWorker{
+		consumer1 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   1,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-1"))
 		consumer1.Start()
 		defer consumer1.Stop()
 
-		consumer2 := New(ctx, &consumerWorker{
+		consumer2 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   2,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-2"))
 
 		consumer2.Start()
 		defer consumer2.Stop()
@@ -102,25 +102,26 @@ func TestActor(t *testing.T) {
 		defer mbox.Stop()
 
 		time.AfterFunc(11*time.Second, cancel)
+		fmt.Println("waiting to finish...")
 		<-ctx.Done()
 	})
 
 	t.Run("TestGroup", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		mbox := NewMailbox[int](ctx, Cap(16))
-		producer := New(ctx, &producerWorker{
+		producer := New[int](ctx, &producerWorker{
 			mbox: mbox,
 		})
 
-		consumer1 := New(ctx, &consumerWorker{
+		consumer1 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   1,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-1"))
 
-		consumer2 := New(ctx, &consumerWorker{
+		consumer2 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   2,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-2"))
 
 		group := NewGroup(ctx, producer, consumer1, consumer2, mbox)
 		group.Start()
@@ -133,25 +134,25 @@ func TestActor(t *testing.T) {
 	t.Run("TestSupervisor", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		mbox := NewMailbox[int](ctx, Cap(16))
-		supervisor := NewSupervisor(ctx, SupervisorConf{
+		supervisor := NewSupervisor[int](ctx, SupervisorConf{
 			RestartOnPanic: true,
 			MaxRestarts:    2,
-			TimeWindow:     5 * time.Second,
+			TimeWindow:     10 * time.Second,
 		})
 
-		supervisor.SpawnChild(&producerWorker{
+		supervisor.SpawnChild(New[int](ctx, &producerWorker{
 			mbox: mbox,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("producer")))
 
-		supervisor.SpawnChild(&consumerWorker{
+		supervisor.SpawnChild(New[int](ctx, &consumerWorker{
 			mbox:    mbox,
 			id:      1,
 			ispanic: true,
-		}, &consumerWorker{
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-1")), New[int](ctx, &consumerWorker{
 			mbox:    mbox,
 			id:      2,
 			ispanic: true,
-		})
+		}).WithMailbox(mbox).WithPID(NewPID("consumer-2")))
 
 		supervisor.Start()
 		defer supervisor.Stop()

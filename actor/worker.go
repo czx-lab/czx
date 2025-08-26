@@ -12,7 +12,6 @@ type (
 	// Worker is the interface that wraps the Exec method.
 	// Exec is called repeatedly by the actor until it returns WorkerStopped.
 	Worker interface {
-		GetId() string
 		Exec(context.Context) WorkerState
 	}
 	// StartableWorker is the interface that wraps the OnStart method.
@@ -31,7 +30,6 @@ type (
 	// It uses a queue to buffer messages when the receiver channel is full.
 	mailboxWorker[T any] struct {
 		ctx      context.Context
-		id       string
 		writer   chan T
 		receiver chan T
 		queue    *cqueue.Queue[T]
@@ -61,11 +59,6 @@ func (m *mailboxWorker[T]) withContext(ctx context.Context) {
 	m.ctx = ctx
 }
 
-// GetId implements Worker.
-func (m *mailboxWorker[T]) GetId() string {
-	return m.id
-}
-
 // Exec implements Worker.
 func (m *mailboxWorker[T]) Exec(context.Context) WorkerState {
 	msgFn := func(msg T) {
@@ -75,7 +68,6 @@ func (m *mailboxWorker[T]) Exec(context.Context) WorkerState {
 			// if receiver is full, push to queue
 			m.queue.Push(msg)
 		}
-
 	}
 	// if empty queue, try read from writer
 	if m.queue.Len() == 0 {

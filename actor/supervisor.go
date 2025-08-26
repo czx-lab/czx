@@ -11,10 +11,10 @@ import (
 type (
 	// Supervisor is an interface that extends Service and StopableWorker.
 	// It manages child actors and can restart them if they stop unexpectedly.
-	Supervisor interface {
+	Supervisor[T any] interface {
 		Service
 		StopableWorker
-		SpawnChild(w ...Worker)
+		SpawnChild(w ...Actor[T])
 		StopChild(pid string)
 	}
 
@@ -28,54 +28,53 @@ type (
 		Recycler    recycler.Recycler // recycler for internal maps
 	}
 	// supervisor is the concrete implementation of the Supervisor interface.
-	supervisor struct {
+	supervisor[T any] struct {
 		conf SupervisorConf
 		ctx  context.Context
 		// child holds the child actors managed by this supervisor.
-		child    *cmap.CMap[string, Actor]
+		child    *cmap.CMap[string, Actor[T]]
 		restarts *cmap.CMap[string, []time.Time] // map of child ID to their restart timestamps
 	}
 )
 
-func NewSupervisor(ctx context.Context, conf SupervisorConf) Supervisor {
+func NewSupervisor[T any](ctx context.Context, conf SupervisorConf) Supervisor[T] {
 	if conf.Recycler == nil {
 		conf.Recycler = NewRecycler()
 	}
-	return &supervisor{
+	return &supervisor[T]{
 		conf:     conf,
 		ctx:      ctx,
-		child:    cmap.New[string, Actor]().WithRecycler(conf.Recycler),
+		child:    cmap.New[string, Actor[T]]().WithRecycler(conf.Recycler),
 		restarts: cmap.New[string, []time.Time]().WithRecycler(conf.Recycler),
 	}
 }
 
 // SpawnChild implements Supervisor.
-func (s *supervisor) SpawnChild(wks ...Worker) {
-	for _, w := range wks {
-		child := New(s.ctx, w)
-		child.WithParent(s)
-		s.child.Set(w.GetId(), child)
+func (s *supervisor[T]) SpawnChild(actors ...Actor[T]) {
+	for _, actor := range actors {
+		actor.WithParent(s)
+		s.child.Set(actor.PID().ID, actor)
 	}
 }
 
 // Start implements Supervisor.
-func (s *supervisor) Start() {
-	s.child.Iterator(func(_ string, a Actor) bool {
+func (s *supervisor[T]) Start() {
+	s.child.Iterator(func(_ string, a Actor[T]) bool {
 		a.Start()
 		return true
 	})
 }
 
 // Stop implements Supervisor.
-func (s *supervisor) Stop() {
-	s.child.Iterator(func(_ string, a Actor) bool {
+func (s *supervisor[T]) Stop() {
+	s.child.Iterator(func(_ string, a Actor[T]) bool {
 		a.Stop()
 		return true
 	})
 }
 
 // StopChild implements Supervisor.
-func (s *supervisor) StopChild(pid string) {
+func (s *supervisor[T]) StopChild(pid string) {
 	if child, ok := s.child.Get(pid); ok {
 		child.Stop()
 		s.child.Delete(pid)
@@ -83,7 +82,7 @@ func (s *supervisor) StopChild(pid string) {
 }
 
 // OnStop implements Supervisor.
-func (s *supervisor) OnStop(pid string) {
+func (s *supervisor[T]) OnStop(pid string) {
 	if !s.conf.RestartOnPanic {
 		return
 	}
@@ -108,8 +107,7 @@ func (s *supervisor) OnStop(pid string) {
 	if !ok {
 		return
 	}
-	child.Stop()
 	child.Start()
 }
 
-var _ Supervisor = (*supervisor)(nil)
+var _ Supervisor[any] = (*supervisor[any])(nil)

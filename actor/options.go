@@ -17,18 +17,10 @@ type (
 	MboxOpt option
 	// mboxOpts holds options for mailbox configuration.
 	mboxOpts struct {
-		ID       string
 		Capacity int
 		Recycler recycler.Recycler
 	}
 )
-
-// Id sets the ID of the mailbox.
-func Id(id string) MboxOpt {
-	return func(o *options) {
-		o.Mailbox.ID = id
-	}
-}
 
 // Cap sets the capacity of the mailbox channel.
 func Cap(cap int) MboxOpt {

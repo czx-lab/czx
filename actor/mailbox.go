@@ -33,7 +33,7 @@ type (
 
 	// mailbox is a concrete implementation of the Mailbox interface.
 	mailbox[T any] struct {
-		actor    Actor
+		actor    Actor[T]
 		writer   chan T
 		receiver <-chan T
 		done     chan struct{} // closed when the mailbox is stopped
@@ -68,7 +68,7 @@ func mailboxIns[T any](ctx context.Context, opts mboxOpts) *mailbox[T] {
 		writer:   writer,
 		receiver: receiver,
 		done:     make(chan struct{}),
-		actor:    New(ctx, mboxWorker),
+		actor:    New[T](ctx, mboxWorker).WithPID(DefaultPID()),
 	}
 }
 
