@@ -2,8 +2,48 @@ package actor
 
 import (
 	"context"
+	"errors"
 	"sync"
+
+	"github.com/czx-lab/czx/container/cmap"
 )
+
+var ErrActorNotFound = errors.New("actor not found")
+
+// actors is a concurrent map to store all active actors.
+// It uses a custom recycler to manage memory usage.
+var actors = cmap.New[*PID, ActorRef[any]]().WithRecycler(NewRecycler())
+
+// RegisterActor registers the given actor in the global actor registry.
+// It uses the actor's PID as the key.
+func RegisterActor[T any](actor ActorRef[T]) {
+	actors.Set(actor.PID(), actor.(ActorRef[any]))
+}
+
+// GetActor retrieves the actor associated with the given PID.
+// It returns the actor and a boolean indicating whether the actor was found.
+func GetActor[T any](pid *PID) (ActorRef[T], bool) {
+	refAny, ok := actors.Get(pid)
+	if !ok {
+		return nil, false
+	}
+	return refAny.(ActorRef[T]), true
+}
+
+// UnregisterActor removes the actor associated with the given PID from the registry.
+func UnregisterActor(pid *PID) {
+	actors.Delete(pid)
+}
+
+// TellToActor sends a message to the actor identified by the given PID.
+func TellToActor[T any](pid *PID, msg T) error {
+	ref, ok := GetActor[T](pid)
+	if !ok {
+		return ErrActorNotFound
+	}
+	ref.Tell(msg)
+	return nil
+}
 
 type (
 	// Service defines the basic lifecycle methods for an actor.
