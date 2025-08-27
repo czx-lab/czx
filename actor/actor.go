@@ -41,8 +41,7 @@ func TellToActor[T any](pid *PID, msg T) error {
 	if !ok {
 		return ErrActorNotFound
 	}
-	ref.Tell(msg)
-	return nil
+	return ref.Tell(msg)
 }
 
 type (
