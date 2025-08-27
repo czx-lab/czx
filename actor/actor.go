@@ -12,12 +12,12 @@ var ErrActorNotFound = errors.New("actor not found")
 
 // actors is a concurrent map to store all active actors.
 // It uses a custom recycler to manage memory usage.
-var actors = cmap.New[*PID, ActorRef[any]]().WithRecycler(NewRecycler())
+var actors = cmap.New[*PID, any]().WithRecycler(NewRecycler())
 
 // RegisterActor registers the given actor in the global actor registry.
 // It uses the actor's PID as the key.
 func RegisterActor[T any](actor ActorRef[T]) {
-	actors.Set(actor.PID(), actor.(ActorRef[any]))
+	actors.Set(actor.PID(), actor)
 }
 
 // GetActor retrieves the actor associated with the given PID.

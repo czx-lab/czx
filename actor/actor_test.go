@@ -83,23 +83,34 @@ func TestActor(t *testing.T) {
 		producer.Start()
 		defer producer.Stop()
 
+		consumer1Pid := NewPID("consumer-1")
 		consumer1 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   1,
-		}).WithMailbox(mbox).WithPID(NewPID("consumer-1"))
+		}).WithMailbox(mbox).WithPID(consumer1Pid)
+
+		fmt.Println(11112)
+
 		consumer1.Start()
 		defer consumer1.Stop()
+
+		RegisterActor(consumer1)
+
+		fmt.Println(1111)
 
 		consumer2 := New[int](ctx, &consumerWorker{
 			mbox: mbox,
 			id:   2,
 		}).WithMailbox(mbox).WithPID(NewPID("consumer-2"))
+		RegisterActor(consumer2)
 
 		consumer2.Start()
 		defer consumer2.Stop()
 
 		mbox.Start()
 		defer mbox.Stop()
+
+		TellToActor(consumer1Pid, 1001)
 
 		time.AfterFunc(11*time.Second, cancel)
 		fmt.Println("waiting to finish...")
