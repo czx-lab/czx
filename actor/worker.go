@@ -30,9 +30,9 @@ type (
 	// It uses a queue to buffer messages when the receiver channel is full.
 	mailboxWorker[T any] struct {
 		ctx      context.Context
-		writer   chan T
+		writer   chan *cqueue.PriorityItem[T]
 		receiver chan T
-		queue    *cqueue.Queue[T]
+		queue    *cqueue.PriorityQueue[T]
 	}
 	// worker is a simple implementation of the Worker interface that wraps a WorkerFunc.
 	worker struct {
@@ -47,11 +47,11 @@ const (
 	WorkerStopped
 )
 
-func newMailboxWorker[T any](opts mboxOpts, writer, receiver chan T) *mailboxWorker[T] {
+func newMailboxWorker[T any](opts mboxOpts, writer chan *cqueue.PriorityItem[T], receiver chan T) *mailboxWorker[T] {
 	return &mailboxWorker[T]{
 		writer:   writer,
 		receiver: receiver,
-		queue:    cqueue.NewQueue[T](0).WithRecycler(opts.Recycler),
+		queue:    cqueue.NewPriorityQueue[T](0).WithRecycler(opts.Recycler),
 	}
 }
 
@@ -61,12 +61,15 @@ func (m *mailboxWorker[T]) withContext(ctx context.Context) {
 
 // Exec implements Worker.
 func (m *mailboxWorker[T]) Exec(context.Context) WorkerState {
-	msgFn := func(msg T) {
+	msgFn := func(msg *cqueue.PriorityItem[T]) {
 		select {
-		case m.receiver <- msg: // direct send to receiver
+		case m.receiver <- msg.Value: // direct send to receiver
 		default:
 			// if receiver is full, push to queue
-			m.queue.Push(msg)
+			m.queue.Push(cqueue.PriorityItem[T]{
+				Value:    msg.Value,
+				Priority: msg.Priority,
+			})
 		}
 	}
 	// if empty queue, try read from writer
@@ -110,7 +113,7 @@ ReadAll:
 	for {
 		select {
 		case dta := <-m.writer:
-			m.receiver <- dta
+			m.receiver <- dta.Value
 		default:
 			break ReadAll
 		}

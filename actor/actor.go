@@ -36,12 +36,12 @@ func UnregisterActor(pid *PID) {
 }
 
 // TellToActor sends a message to the actor identified by the given PID.
-func TellToActor[T any](pid *PID, msg T) error {
+func TellToActor[T any](pid *PID, msg T, priority int) error {
 	ref, ok := GetActor[T](pid)
 	if !ok {
 		return ErrActorNotFound
 	}
-	return ref.Tell(msg)
+	return ref.Tell(msg, priority)
 }
 
 type (
@@ -63,8 +63,8 @@ type (
 		ActorRef[T]
 	}
 	ActorRef[T any] interface {
-		PID() *PID            // get the actor's PID
-		Tell(message T) error // send a message to the actor
+		PID() *PID                          // get the actor's PID
+		Tell(message T, priority int) error // send a message to the actor
 		// Set the actor's PID
 		// WithPID returns the actor itself for chaining.
 		WithPID(pid *PID) Actor[T]
@@ -117,8 +117,8 @@ func (a *actor[T]) PID() *PID {
 }
 
 // Tell implements Actor.
-func (a *actor[T]) Tell(message T) error {
-	return a.mailbox.Write(a.ctx, message)
+func (a *actor[T]) Tell(message T, priority int) error {
+	return a.mailbox.Write(message, priority)
 }
 
 // WithParent implements Actor.

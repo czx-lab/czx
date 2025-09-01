@@ -3,6 +3,7 @@ package cqueue
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,40 @@ func (r *Recycler) Shrink(len_ int, cap_ int) bool {
 }
 
 var _ recycler.Recycler = (*Recycler)(nil)
+
+func TestPriorityQueue(t *testing.T) {
+	pq := NewPriorityQueue[int](0)
+
+	if ok := pq.Push(PriorityItem[int]{
+		Value:    1,
+		Priority: 3,
+	}); !ok {
+		t.Fatal("push filed!")
+	}
+	if ok := pq.Push(PriorityItem[int]{
+		Value:    2,
+		Priority: 2,
+	}); !ok {
+		t.Fatal("push filed!")
+	}
+	if ok := pq.Push(PriorityItem[int]{
+		Value:    3,
+		Priority: 1,
+	}); !ok {
+		t.Fatal("push filed!")
+	}
+	if ok := pq.Push(PriorityItem[int]{
+		Value:    4,
+		Priority: 0,
+	}); !ok {
+		t.Fatal("push filed!")
+	}
+
+	val, ok := pq.Pop()
+	if !ok || val != 4 {
+		t.Fatal("pop filed!", val, ok)
+	}
+}
 
 func TestQueueMemStats(t *testing.T) {
 	var m runtime.MemStats
@@ -87,45 +122,45 @@ func TestQueueMemStats(t *testing.T) {
 	fmt.Printf("After Shrink: Alloc = %v MB, Len = %d\n", m.Alloc/(1024*1024), q.Len())
 }
 
-// func BenchmarkQueue(b *testing.B) {
+func BenchmarkQueue(b *testing.B) {
 
-// 	queue := NewQueue[*Data](0)
+	queue := NewQueue[*Data](0)
 
-// 	pool := sync.Pool{
-// 		New: func() any {
-// 			return new(Data)
-// 		},
-// 	}
+	pool := sync.Pool{
+		New: func() any {
+			return new(Data)
+		},
+	}
 
-// 	// 启动消费者
-// 	done := make(chan struct{})
-// 	go func() {
-// 		count := 0
-// 		for {
-// 			data, ok := queue.Pop()
-// 			if ok && data != nil {
-// 				pool.Put(data)
-// 			}
-// 			count++
-// 			if count >= b.N {
-// 				break
-// 			}
-// 		}
-// 		close(done)
-// 	}()
+	// 启动消费者
+	done := make(chan struct{})
+	go func() {
+		count := 0
+		for {
+			data, ok := queue.Pop()
+			if ok && data != nil {
+				pool.Put(data)
+			}
+			count++
+			if count >= b.N {
+				break
+			}
+		}
+		close(done)
+	}()
 
-// 	b.ResetTimer()
-// 	for i := 0; i < b.N; i++ {
-// 		q := pool.Get().(*Data)
-// 		q.ID = i
-// 		queue.Push(q)
-// 	}
-// 	b.StopTimer()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		q := pool.Get().(*Data)
+		q.ID = i
+		queue.Push(q)
+	}
+	b.StopTimer()
 
-// 	// 关闭输入，等待消费完毕
-// 	select {
-// 	case <-done:
-// 	case <-time.After(5 * time.Second):
-// 		b.Fatal("timeout waiting for consumer")
-// 	}
-// }
+	// 关闭输入，等待消费完毕
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		b.Fatal("timeout waiting for consumer")
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync/atomic"
+
+	"github.com/czx-lab/czx/container/cqueue"
 )
 
 var (
@@ -23,7 +25,7 @@ type (
 	}
 	// MailboxWriter is an interface for writing messages to the mailbox.
 	MailboxWriter[T any] interface {
-		Write(context.Context, T) error
+		Write(T, int) error
 	}
 
 	// MailboxReceiver is an interface for receiving messages from the mailbox.
@@ -33,8 +35,9 @@ type (
 
 	// mailbox is a concrete implementation of the Mailbox interface.
 	mailbox[T any] struct {
+		ctx      context.Context
 		actor    Actor[T]
-		writer   chan T
+		writer   chan *cqueue.PriorityItem[T]
 		receiver <-chan T
 		done     chan struct{} // closed when the mailbox is stopped
 		state    *atomic.Int32 // mbxState
@@ -58,7 +61,7 @@ func NewMailbox[T any](ctx context.Context, opts ...MboxOpt) Mailbox[T] {
 
 func mailboxIns[T any](ctx context.Context, opts mboxOpts) *mailbox[T] {
 	var (
-		writer   = make(chan T, opts.Capacity)
+		writer   = make(chan *cqueue.PriorityItem[T], opts.Capacity)
 		receiver = make(chan T, opts.Capacity)
 	)
 	mboxWorker := newMailboxWorker(opts, writer, receiver)
@@ -69,6 +72,7 @@ func mailboxIns[T any](ctx context.Context, opts mboxOpts) *mailbox[T] {
 		receiver: receiver,
 		done:     make(chan struct{}),
 		actor:    New[T](ctx, mboxWorker).WithPID(DefaultPID()),
+		ctx:      ctx,
 	}
 }
 
@@ -97,7 +101,7 @@ func (m *mailbox[T]) Stop() {
 }
 
 // Write implements Mailbox.
-func (m *mailbox[T]) Write(ctx context.Context, data T) error {
+func (m *mailbox[T]) Write(data T, priority int) error {
 	state := m.state.Load()
 	if state != mbxRunning.Int32() {
 		return ErrMailboxNotRunning
@@ -105,9 +109,9 @@ func (m *mailbox[T]) Write(ctx context.Context, data T) error {
 	select {
 	case <-m.done:
 		return ErrMailboxStopped
-	case <-ctx.Done():
-		return fmt.Errorf("write mailbox data timeout: %w", ctx.Err())
-	case m.writer <- data:
+	case <-m.ctx.Done():
+		return fmt.Errorf("write mailbox data timeout: %w", m.ctx.Err())
+	case m.writer <- &cqueue.PriorityItem[T]{Value: data, Priority: priority}:
 		return nil
 	}
 }

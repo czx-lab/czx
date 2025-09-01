@@ -30,7 +30,7 @@ func (p *producerWorker) Exec(ctx context.Context) WorkerState {
 		return WorkerStopped
 	case <-time.After(200 * time.Millisecond):
 		p.num++
-		_ = p.mbox.Write(ctx, p.num)
+		_ = p.mbox.Write(p.num, 0)
 		return WorkerRunning
 	}
 }
@@ -110,7 +110,7 @@ func TestActor(t *testing.T) {
 		mbox.Start()
 		defer mbox.Stop()
 
-		TellToActor(consumer1Pid, 1001)
+		TellToActor(consumer1Pid, 1001, 0)
 
 		time.AfterFunc(11*time.Second, cancel)
 		fmt.Println("waiting to finish...")
