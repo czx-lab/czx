@@ -27,6 +27,13 @@ type (
 		NoDelay   gnet.TCPSocketOpt
 		Multicore bool
 		Ticker    bool
+		// Maximum number of connections
+		MaxConn int
+		// If ImmediateRelease is true, the server will release resources immediately after stopping.
+		// This may lead to abrupt disconnections for active connections.
+		// If false, the server will wait for all active connections to close gracefully before releasing resources.
+		// Default is false.
+		ImmediateRelease bool
 	}
 	GnetTcpServer struct {
 		conf   *GnetTcpServerConf
@@ -77,6 +84,11 @@ func (g *GnetTcpServer) Stop() {
 func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 	switch agent := c.Context().(type) {
 	case network.Agent:
+		if es.conf.ImmediateRelease {
+			agent.Destroy()
+		} else {
+			agent.Close()
+		}
 		agent.OnClose()
 	}
 
@@ -86,6 +98,10 @@ func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 
 // OnOpen implements gnet.EventHandler.
 func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
+	if es.eng.CountConnections() > es.conf.MaxConn {
+		xlog.Write().Warn("too many connections", zap.Int("max", es.conf.MaxConn))
+		return nil, gnet.Close
+	}
 	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf).WithParse(es.parse)
 	agent := es.agent(conn)
 

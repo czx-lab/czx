@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/xlog"
+	"go.uber.org/zap"
 
 	"github.com/gorilla/websocket"
 )
@@ -21,6 +23,11 @@ type WsServerConf struct {
 	PendingWriteNum int
 	Timeout         int
 	MaxMsgSize      uint32
+	// If ImmediateRelease is true, the server will release resources immediately after stopping.
+	// This may lead to abrupt disconnections for active connections.
+	// If false, the server will wait for all active connections to close gracefully before releasing resources.
+	// Default is false.
+	ImmediateRelease bool
 }
 
 type WsHandler struct {
@@ -74,6 +81,7 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if the maximum number of connections has been reached
 	// If so, close the connection and return an error response
 	if len(handler.conns) >= handler.opt.MaxConn {
+		xlog.Write().Warn("too many connections", zap.Int("max", handler.opt.MaxConn))
 		handler.mu.Unlock()
 		conn.Close()
 		return
@@ -97,7 +105,12 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agent.OnPreConn(clentAddr)
 	agent.Run()
 
-	wsconn.Close()
+	// Release resources based on the ImmediateRelease configuration
+	if handler.opt.ImmediateRelease {
+		wsconn.Destroy()
+	} else {
+		wsconn.Close()
+	}
 
 	handler.mu.Lock()
 	delete(handler.conns, conn)

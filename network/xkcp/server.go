@@ -27,6 +27,11 @@ type (
 		ParityShards int
 		// Maximum number of connections
 		MaxConn int
+		// If ImmediateRelease is true, the server will release resources immediately after stopping.
+		// This may lead to abrupt disconnections for active connections.
+		// If false, the server will wait for all active connections to close gracefully before releasing resources.
+		// Default is false.
+		ImmediateRelease bool
 	}
 	KcpServer struct {
 		sync.Mutex
@@ -118,8 +123,13 @@ func (srv *KcpServer) run() {
 
 		go func() {
 			agent.Run()
+			// Release resources based on the ImmediateRelease configuration
+			if srv.conf.ImmediateRelease {
+				kcpconn.Destroy()
+			} else {
+				kcpconn.Close()
+			}
 
-			kcpconn.Close()
 			srv.Lock()
 			delete(srv.conns, conn)
 			srv.Unlock()

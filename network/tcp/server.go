@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/xlog"
+	"go.uber.org/zap"
 )
 
 var (
@@ -20,6 +22,11 @@ type (
 		Addr string
 		// Maximum number of connections
 		MaxConn int
+		// If ImmediateRelease is true, the server will release resources immediately after stopping.
+		// This may lead to abrupt disconnections for active connections.
+		// If false, the server will wait for all active connections to close gracefully before releasing resources.
+		// Default is false.
+		ImmediateRelease bool
 	}
 	TcpServer struct {
 		sync.Mutex
@@ -93,6 +100,7 @@ func (srv *TcpServer) run() {
 
 		// Check if the maximum number of connections has been reached
 		if len(srv.conns) >= srv.conf.MaxConn {
+			xlog.Write().Warn("too many connections", zap.Int("max", srv.conf.MaxConn))
 			srv.Unlock()
 			conn.Close()
 			continue
@@ -114,8 +122,12 @@ func (srv *TcpServer) run() {
 
 		go func() {
 			agent.Run()
-
-			tcpconn.Close()
+			// Release resources based on the ImmediateRelease configuration
+			if srv.conf.ImmediateRelease {
+				tcpconn.Destroy()
+			} else {
+				tcpconn.Close()
+			}
 			srv.Lock()
 			delete(srv.conns, conn)
 			srv.Unlock()
