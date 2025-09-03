@@ -14,13 +14,14 @@ import (
 )
 
 type WsServerConf struct {
-	Addr            string
-	CertFile        string
-	KeyFile         string
-	MaxConn         int
-	PendingWriteNum int
-	Timeout         int
-	MaxMsgSize      uint32
+	Addr             string
+	CertFile         string
+	KeyFile          string
+	MaxConn          int
+	PendingWriteNum  int
+	Timeout          int
+	MaxMsgSize       uint32
+	ImmediateRelease bool // Immediate release of resources on connection close
 }
 
 type WsHandler struct {
@@ -97,7 +98,11 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agent.OnPreConn(clentAddr)
 	agent.Run()
 
-	wsconn.Close()
+	if handler.opt.ImmediateRelease {
+		wsconn.Destroy()
+	} else {
+		wsconn.Close()
+	}
 
 	handler.mu.Lock()
 	delete(handler.conns, conn)
