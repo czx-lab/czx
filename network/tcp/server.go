@@ -20,6 +20,8 @@ type (
 		Addr string
 		// Maximum number of connections
 		MaxConn int
+		// ImmediateRelease indicates whether to release resources immediately upon connection close
+		ImmediateRelease bool
 	}
 	TcpServer struct {
 		sync.Mutex
@@ -115,7 +117,12 @@ func (srv *TcpServer) run() {
 		go func() {
 			agent.Run()
 
-			tcpconn.Close()
+			// Close the connection and clean up resources
+			if srv.conf.ImmediateRelease {
+				tcpconn.Destroy()
+			} else {
+				tcpconn.Close()
+			}
 			srv.Lock()
 			delete(srv.conns, conn)
 			srv.Unlock()

@@ -21,6 +21,8 @@ type WsServerConf struct {
 	PendingWriteNum int
 	Timeout         int
 	MaxMsgSize      uint32
+	// ImmediateRelease indicates whether to release resources immediately upon connection close
+	ImmediateRelease bool
 }
 
 type WsHandler struct {
@@ -98,7 +100,12 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agent.OnPreConn(clentAddr)
 	agent.Run()
 
-	wsconn.Close()
+	// Close the connection and clean up resources
+	if handler.opt.ImmediateRelease {
+		wsconn.Destroy()
+	} else {
+		wsconn.Close()
+	}
 
 	handler.mu.Lock()
 	delete(handler.conns, conn)
