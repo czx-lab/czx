@@ -56,6 +56,12 @@ func TestPriorityQueue(t *testing.T) {
 	}); !ok {
 		t.Fatal("push filed!")
 	}
+	if ok := pq.Push(PriorityItem[int]{
+		Value:    5,
+		Priority: 0,
+	}); !ok {
+		t.Fatal("push filed!")
+	}
 
 	val, ok := pq.Pop()
 	if !ok || val != 4 {

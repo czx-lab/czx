@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/czx-lab/czx/container/recycler"
 	"github.com/czx-lab/czx/utils/xslices"
@@ -22,8 +23,9 @@ type (
 	item[T any]   struct {
 		value T
 		// The priority of the item in the queue.
-		priority int
-		index    int // The index of the item in the heap.
+		priority  int
+		index     int // The index of the item in the heap.
+		timestamp int64
 	}
 	// A PriorityQueue implements heap.Interface and holds Items.
 	// The zero value for PriorityQueue is an empty queue ready to use.
@@ -42,6 +44,10 @@ func (q qitems[T]) Len() int { return len(q) }
 
 // Less implements heap.Interface.
 func (q qitems[T]) Less(i int, j int) bool {
+	// If priorities are equal, compare timestamps
+	if q[i].priority == q[j].priority {
+		return q[i].timestamp < q[j].timestamp
+	}
 	return q[i].priority < q[j].priority
 }
 
@@ -108,7 +114,7 @@ func (pq *PriorityQueue[T]) Push(value PriorityItem[T]) bool {
 	if pq.maxCap > 0 && len(pq.items) >= pq.maxCap {
 		return false
 	}
-	item := &item[T]{value: value.Value, priority: value.Priority}
+	item := &item[T]{value: value.Value, priority: value.Priority, timestamp: time.Now().UnixMilli()}
 	heap.Push(&pq.items, item)
 	return true
 }
