@@ -4,7 +4,6 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/container/recycler"
@@ -115,11 +114,7 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 	go func() {
 		for {
 			// Try to dequeue a message
-			msg, ok := queue.Pop()
-			if !ok {
-				time.Sleep(10 * time.Millisecond)
-				continue // No message to process
-			}
+			msg := queue.WaitPop()
 
 			if callback != nil {
 				callback(msg) // Call the callback function with the received message

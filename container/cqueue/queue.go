@@ -14,6 +14,7 @@ import (
 // It uses a mutex to ensure that only one goroutine can access the queue at a time.
 type Queue[T any] struct {
 	mu          sync.Mutex
+	cond        *sync.Cond
 	queue       []T
 	maxCapacity int
 	recycler    recycler.Recycler // Optional recycler for memory management
@@ -21,9 +22,11 @@ type Queue[T any] struct {
 
 // NewQueue creates a new instance of Queue for the specified type T.
 func NewQueue[T any](maxcap int) *Queue[T] {
-	return &Queue[T]{
+	q := &Queue[T]{
 		maxCapacity: maxcap,
 	}
+	q.cond = sync.NewCond(&q.mu)
+	return q
 }
 
 // WithRecycler sets a recycler for the queue.
@@ -95,6 +98,7 @@ func (q *Queue[T]) Push(data ...T) error {
 	}
 
 	q.queue = append(q.queue, data...)
+	q.cond.Signal() // Notify one waiting goroutine, if any
 	return nil
 }
 
@@ -121,6 +125,27 @@ func (q *Queue[T]) Pop() (T, bool) {
 
 	q.shrink()
 	return data, true
+}
+
+// WaitPop removes and returns the first element from the queue.
+func (q *Queue[T]) WaitPop() T {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	for len(q.queue) == 0 {
+		q.cond.Wait()
+	}
+
+	data := q.queue[0]
+	q.queue = q.queue[1:]
+
+	if len(q.queue) == 0 {
+		q.queue = nil // Clear the queue if it becomes empty
+		return data
+	}
+
+	q.shrink()
+	return data
 }
 
 // Len returns the current length of the queue.

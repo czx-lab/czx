@@ -34,6 +34,7 @@ type (
 	PriorityQueue[T any] struct {
 		items    qitems[T]
 		maxCap   int
+		cond     *sync.Cond
 		recycler recycler.Recycler
 		mu       sync.Mutex
 	}
@@ -77,9 +78,11 @@ func (q qitems[T]) Swap(i int, j int) {
 }
 
 func NewPriorityQueue[T any](MaxCapacity int) *PriorityQueue[T] {
-	return &PriorityQueue[T]{
+	pq := &PriorityQueue[T]{
 		maxCap: MaxCapacity,
 	}
+	pq.cond = sync.NewCond(&pq.mu)
+	return pq
 }
 
 func (pq *PriorityQueue[T]) WithRecycler(r recycler.Recycler) *PriorityQueue[T] {
@@ -116,7 +119,21 @@ func (pq *PriorityQueue[T]) Push(value PriorityItem[T]) bool {
 	}
 	item := &item[T]{value: value.Value, priority: value.Priority, timestamp: time.Now().UnixMilli()}
 	heap.Push(&pq.items, item)
+	pq.cond.Signal()
 	return true
+}
+
+// WaitPop blocks until an element is available and returns it.
+func (pq *PriorityQueue[T]) WaitPop() T {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	for len(pq.items) == 0 {
+		pq.cond.Wait()
+	}
+	val := heap.Pop(&pq.items).(*item[T])
+	pq.shrink()
+	return val.value
 }
 
 // Pop removes and returns the highest priority element from the priority queue.
