@@ -117,9 +117,15 @@ func (pq *PriorityQueue[T]) Push(value PriorityItem[T]) bool {
 	if pq.maxCap > 0 && len(pq.items) >= pq.maxCap {
 		return false
 	}
+	var available bool
+	if len(pq.items) == 0 {
+		available = true
+	}
 	item := &item[T]{value: value.Value, priority: value.Priority, timestamp: time.Now().UnixMilli()}
 	heap.Push(&pq.items, item)
-	pq.cond.Signal()
+	if available {
+		pq.cond.Signal()
+	}
 	return true
 }
 

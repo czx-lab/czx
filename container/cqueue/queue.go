@@ -97,8 +97,15 @@ func (q *Queue[T]) Push(data ...T) error {
 		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
 	}
 
+	var available bool
+	if len(q.queue) == 0 {
+		available = true
+	}
+
 	q.queue = append(q.queue, data...)
-	q.cond.Signal() // Notify one waiting goroutine, if any
+	if available {
+		q.cond.Signal() // Notify one waiting goroutine, if any
+	}
 	return nil
 }
 
