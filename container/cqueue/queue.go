@@ -17,13 +17,17 @@ type Queue[T any] struct {
 	queue       []T
 	maxCapacity int
 	recycler    recycler.Recycler // Optional recycler for memory management
+	cond        *sync.Cond
 }
 
 // NewQueue creates a new instance of Queue for the specified type T.
 func NewQueue[T any](maxcap int) *Queue[T] {
-	return &Queue[T]{
+	q := &Queue[T]{
 		maxCapacity: maxcap,
 	}
+	q.cond = sync.NewCond(&q.mu)
+
+	return q
 }
 
 // WithRecycler sets a recycler for the queue.
@@ -94,8 +98,37 @@ func (q *Queue[T]) Push(data ...T) error {
 		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
 	}
 
+	var available bool
+	if len(q.queue) == 0 {
+		available = true
+	}
+
 	q.queue = append(q.queue, data...)
+
+	if available {
+		q.cond.Signal()
+	}
 	return nil
+}
+
+// WaitPop removes and returns the first element from the queue.
+// If the queue is empty, it waits until an element is available.
+// It locks the queue to ensure thread safety while removing the element.
+func (q *Queue[T]) WaitPop() T {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for len(q.queue) == 0 {
+		q.cond.Wait()
+	}
+
+	data := q.queue[0]
+	q.queue = q.queue[1:]
+
+	if len(q.queue) == 0 {
+		q.queue = nil // Clear the queue if it becomes empty
+	}
+
+	return data
 }
 
 // Pop removes and returns the first element from the queue.
