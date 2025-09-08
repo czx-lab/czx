@@ -119,6 +119,7 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 				eb.mu.RUnlock()
 				break
 			}
+			eb.mu.RUnlock()
 
 			// Try to dequeue a message
 			msg := queue.WaitPop()
