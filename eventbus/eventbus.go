@@ -113,6 +113,13 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 
 	go func() {
 		for {
+			// Check if the event has been unsubscribed
+			eb.mu.RLock()
+			if len(eb.queueHandlers[event]) == 0 {
+				eb.mu.RUnlock()
+				break
+			}
+
 			// Try to dequeue a message
 			msg := queue.WaitPop()
 
