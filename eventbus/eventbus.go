@@ -4,7 +4,6 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/container/recycler"
@@ -107,8 +106,7 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 			queues := eb.queueHandlers[event]
 			if len(queues) == 0 {
 				eb.mu.RUnlock()
-				time.Sleep(10 * time.Millisecond) // Sleep for a short duration to avoid busy waiting
-				continue
+				break // No more queues for this event, exit the goroutine
 			}
 
 			// Get the first queue for the event
@@ -116,12 +114,7 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 			eb.mu.RUnlock()
 
 			// Try to dequeue a message
-			msg, ok := queue.Pop()
-			if !ok {
-				time.Sleep(10 * time.Millisecond) // Sleep for a short duration to avoid busy waiting
-				continue                          // No message to process
-			}
-
+			msg := queue.WaitPop()
 			if callback != nil {
 				callback(msg) // Call the callback function with the received message
 			}
