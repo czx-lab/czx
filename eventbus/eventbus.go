@@ -108,9 +108,6 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 				eb.mu.RUnlock()
 				break // No more queues for this event, exit the goroutine
 			}
-
-			// Get the first queue for the event
-			queue := queues[0]
 			eb.mu.RUnlock()
 
 			// Try to dequeue a message
