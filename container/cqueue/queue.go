@@ -18,6 +18,7 @@ type Queue[T any] struct {
 	queue       []T
 	maxCapacity int
 	recycler    recycler.Recycler // Optional recycler for memory management
+	closed      bool
 }
 
 // NewQueue creates a new instance of Queue for the specified type T.
@@ -33,6 +34,18 @@ func NewQueue[T any](maxcap int) *Queue[T] {
 func (q *Queue[T]) WithRecycler(r recycler.Recycler) *Queue[T] {
 	q.recycler = r
 	return q
+}
+
+// Close marks the queue as closed and wakes up all waiting goroutines.
+func (q *Queue[T]) Close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
+
+	q.closed = true
+	q.cond.Broadcast()
 }
 
 // Delete removes the first occurrence of an element from the queue.
@@ -93,6 +106,10 @@ func (q *Queue[T]) Push(data ...T) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	if q.closed {
+		return fmt.Errorf("queue is closed")
+	}
+
 	if q.maxCapacity > 0 && len(q.queue) >= q.maxCapacity {
 		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
 	}
@@ -135,12 +152,21 @@ func (q *Queue[T]) Pop() (T, bool) {
 }
 
 // WaitPop removes and returns the first element from the queue.
-func (q *Queue[T]) WaitPop() T {
+func (q *Queue[T]) WaitPop() (T, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	for len(q.queue) == 0 {
+	if q.closed {
+		var zero T
+		return zero, false
+	}
+
+	for len(q.queue) == 0 && !q.closed {
 		q.cond.Wait()
+	}
+	if q.closed {
+		var zero T
+		return zero, false
 	}
 
 	data := q.queue[0]
@@ -148,11 +174,10 @@ func (q *Queue[T]) WaitPop() T {
 
 	if len(q.queue) == 0 {
 		q.queue = nil // Clear the queue if it becomes empty
-		return data
 	}
 
 	q.shrink()
-	return data
+	return data, true
 }
 
 // Len returns the current length of the queue.

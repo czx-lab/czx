@@ -122,7 +122,10 @@ func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
 			eb.mu.RUnlock()
 
 			// Try to dequeue a message
-			msg := queue.WaitPop()
+			msg, ok := queue.WaitPop()
+			if !ok {
+				break // Exit if the queue is closed or unsubscribed
+			}
 
 			if callback != nil {
 				callback(msg) // Call the callback function with the received message
@@ -169,6 +172,7 @@ UnsubscribenQueue:
 	queueSubs := eb.queueHandlers[event]
 	for _, queue := range queueSubs {
 		queue.Clear()
+		queue.Close()
 	}
 
 	delete(eb.queueHandlers, event)
@@ -218,6 +222,8 @@ func (eb *EventBus) UnsubscribeQueue(event string, queue *cqueue.Queue[any]) {
 	if len(eb.queueHandlers[event]) == 0 {
 		delete(eb.queueHandlers, event)
 	}
+	queue.Clear()
+	queue.Close()
 }
 
 // SubscribeOnce creates a new subscription for the given event.

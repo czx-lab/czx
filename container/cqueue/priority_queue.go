@@ -37,6 +37,7 @@ type (
 		cond     *sync.Cond
 		recycler recycler.Recycler
 		mu       sync.Mutex
+		closed   bool
 	}
 )
 
@@ -90,6 +91,19 @@ func (pq *PriorityQueue[T]) WithRecycler(r recycler.Recycler) *PriorityQueue[T] 
 	return pq
 }
 
+// Close marks the priority queue as closed and wakes up all waiting goroutines.
+func (pq *PriorityQueue[T]) Close() {
+	pq.mu.Lock()
+	defer pq.mu.Unlock()
+
+	if pq.closed {
+		return
+	}
+
+	pq.closed = true
+	pq.cond.Broadcast()
+}
+
 func (pq *PriorityQueue[T]) shrink() {
 	if pq.recycler == nil {
 		return
@@ -114,6 +128,10 @@ func (pq *PriorityQueue[T]) Push(value PriorityItem[T]) bool {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
+	if pq.closed {
+		return false
+	}
+
 	if pq.maxCap > 0 && len(pq.items) >= pq.maxCap {
 		return false
 	}
@@ -130,16 +148,23 @@ func (pq *PriorityQueue[T]) Push(value PriorityItem[T]) bool {
 }
 
 // WaitPop blocks until an element is available and returns it.
-func (pq *PriorityQueue[T]) WaitPop() T {
+func (pq *PriorityQueue[T]) WaitPop() (T, bool) {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
-	for len(pq.items) == 0 {
+	for len(pq.items) == 0 && !pq.closed {
 		pq.cond.Wait()
 	}
+
+	if pq.closed {
+		var zero T
+		return zero, false
+	}
+
 	val := heap.Pop(&pq.items).(*item[T])
 	pq.shrink()
-	return val.value
+
+	return val.value, true
 }
 
 // Pop removes and returns the highest priority element from the priority queue.
