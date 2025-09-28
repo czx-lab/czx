@@ -68,14 +68,14 @@ func init() {
 	}
 }
 
-func Load(conf *XLogConf) {
+func Load(conf *XLogConf, opts ...zap.Option) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	defaultConf(conf)
 	atomicConf = conf
 	atomicLogger = &XLog{conf: conf}
-	atomicLogger.instance = instance(*conf)
+	atomicLogger.instance = instance(*conf, opts...)
 }
 
 func Write() *zap.Logger {
@@ -85,13 +85,14 @@ func Write() *zap.Logger {
 	return atomicLogger.instance
 }
 
-func instance(conf XLogConf) *zap.Logger {
-	opts := []zap.Option{
+func instance(conf XLogConf, opts ...zap.Option) *zap.Logger {
+	options := []zap.Option{
 		zap.AddCaller(), zap.AddStacktrace(zap.ErrorLevel),
 	}
 	if len(conf.ServiceName) > 0 {
-		opts = append(opts, zap.Fields(zap.String("service", conf.ServiceName)))
+		options = append(options, zap.Fields(zap.String("service", conf.ServiceName)))
 	}
+	options = append(options, opts...)
 
 	var write zapcore.WriteSyncer
 	switch conf.Mode {
@@ -106,7 +107,7 @@ func instance(conf XLogConf) *zap.Logger {
 	if !ok {
 		level = zap.DebugLevel
 	}
-	return zap.New(zapcore.NewCore(encoder(conf), write, level), opts...)
+	return zap.New(zapcore.NewCore(encoder(conf), write, level), options...)
 }
 
 func sync(conf XLogConf) zapcore.WriteSyncer {
