@@ -7,7 +7,7 @@ import (
 	"syscall"
 )
 
-var version = "1.11.1"
+var version = "1.11.2"
 
 // Version returns the current version of the czx framework.
 func Version() string {
