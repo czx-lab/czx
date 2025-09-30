@@ -44,6 +44,9 @@ func (mc *Memo) cleanup() {
 		select {
 		case <-ticker.C:
 			mc.data.Iterator(func(key string, item *CacheItem) bool {
+				if item.ExpireAt.IsZero() {
+					return true // No expiration set, keep the item
+				}
 				if item.ExpireAt.Before(time.Now()) {
 					mc.data.Delete(key)
 				}
