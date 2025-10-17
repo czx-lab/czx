@@ -84,14 +84,8 @@ func (g *GnetTcpServer) Stop() {
 func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 	switch agent := c.Context().(type) {
 	case network.Agent:
-		if es.conf.ImmediateRelease {
-			agent.Destroy()
-		} else {
-			agent.Close()
-		}
 		agent.OnClose()
 	}
-
 	c.SetContext(nil)
 	return gnet.None
 }
