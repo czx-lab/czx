@@ -126,7 +126,13 @@ func (m *MessageParser) Write(conn network.Conn, args ...[]byte) error {
 		l += len(args[i])
 	}
 
-	conn.WriteMessage(msg)
+	writer, ok := conn.(io.Writer)
+	if !ok {
+		return errors.New("connection does not implement io.Writer")
+	}
+	_, err := writer.Write(msg)
+
+	return err
 
 	return nil
 }

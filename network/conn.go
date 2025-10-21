@@ -29,13 +29,6 @@ type (
 		Destroy()
 	}
 
-	// Reader is an interface for reading data from a connection.
-	// It provides a method to read data into a byte slice.
-	Reader interface {
-		// Read reads data from the connection and returns it as an int and an error.
-		Read([]byte) (int, error)
-	}
-
 	// ClientAddrMessage is a struct that contains information about the client address and the request.
 	// It includes the IP address, port, and the HTTP request associated with the connection.
 	ClientAddrMessage struct {

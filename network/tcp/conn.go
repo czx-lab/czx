@@ -1,6 +1,8 @@
 package tcp
 
 import (
+	"errors"
+	"io"
 	"net"
 	"sync"
 
@@ -37,6 +39,7 @@ type (
 )
 
 var _ network.Conn = (*TcpConn)(nil)
+var _ io.Writer = (*TcpConn)(nil)
 
 func NewTcpConn(conn net.Conn, conf *TcpConnConf) *TcpConn {
 	if conf.PendingWrite <= 0 {
@@ -159,4 +162,17 @@ func (c *TcpConn) WithClientAddr(clientAddr network.ClientAddrMessage) {
 // WriteMessage implements network.Conn.
 func (c *TcpConn) WriteMessage(args ...[]byte) error {
 	return c.parse.Write(c, args...)
+}
+
+// Write implements io.Writer.
+func (c *TcpConn) Write(p []byte) (n int, err error) {
+	c.Lock()
+	defer c.Unlock()
+
+	if c.done || p == nil {
+		return 0, errors.New("dead connection or nil data")
+	}
+
+	c.doWrite(p)
+	return len(p), nil
 }
