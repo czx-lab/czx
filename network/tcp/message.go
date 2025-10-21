@@ -133,8 +133,6 @@ func (m *MessageParser) Write(conn network.Conn, args ...[]byte) error {
 	_, err := writer.Write(msg)
 
 	return err
-
-	return nil
 }
 
 func defaultParseConf(conf *MessageParserConf) {
