@@ -16,16 +16,9 @@ type (
 	// message represents a protobuf message with its ID, type, and handler.
 	// It also contains a raw handler for processing raw data.
 	message struct {
-		id         uint16
-		msgtype    reflect.Type
-		handler    network.Handler
-		rawHandler network.Handler
-	}
-	// raw represents a raw protobuf message with its ID and data.
-	// It is used for processing raw data without unmarshalling it into a specific message type.
-	Raw struct {
-		id   uint16
-		data []byte
+		id      uint16
+		msgtype reflect.Type
+		handler network.Handler
 	}
 	// Processor is a protobuf message processor that handles marshalling,
 	// unmarshalling, and processing of protobuf messages.
@@ -84,17 +77,6 @@ func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
 
 // Process implements network.Processor.
 func (p *Processor) Process(data any, agent network.Agent) error {
-	if raw, ok := data.(Raw); ok {
-		info, ok := p.messages[raw.id]
-		if !ok {
-			return fmt.Errorf("message id %v not registered", raw.id)
-		}
-		if info.rawHandler != nil {
-			info.rawHandler([]any{raw.id, raw.data, agent})
-		}
-		return nil
-	}
-
 	msgtype := reflect.TypeOf(data)
 	id, ok := p.ids[msgtype]
 	if !ok {
@@ -129,9 +111,6 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("protobuf: message ID %d not registered", id)
 	}
-	if info.rawHandler != nil {
-		return Raw{id, data[2:]}, nil
-	}
 
 	msg := reflect.New(info.msgtype.Elem()).Interface()
 	return msg, proto.Unmarshal(data[2:], msg.(proto.Message))
@@ -140,7 +119,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 // Register implements network.Processor.
 func (p *Processor) Register(msg network.Message) error {
 	msgtype := reflect.TypeOf(msg.Data)
-	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
+	if msgtype == nil || msgtype.Kind() != reflect.Pointer {
 		return errors.New("protobuf: message must be a pointer")
 	}
 	if _, ok := p.ids[msgtype]; ok {
@@ -167,18 +146,6 @@ func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 	}
 
 	p.messages[id].handler = handler
-	return nil
-}
-
-// RegisterRawHandler implements network.Processor.
-func (p *Processor) RegisterRawHandler(msg any, handler network.Handler) error {
-	msgtype := reflect.TypeOf(msg)
-	id, ok := p.ids[msgtype]
-	if !ok {
-		return fmt.Errorf("protobuf: message %s not registered", msgtype)
-	}
-
-	p.messages[id].rawHandler = handler
 	return nil
 }
 
