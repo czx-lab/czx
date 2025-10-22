@@ -1,9 +1,12 @@
 package unix
 
 import (
-	"log"
+	"errors"
 	"net"
-	"time"
+	"sync"
+
+	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/xlog"
 )
 
 type (
@@ -11,48 +14,95 @@ type (
 		Path string
 	}
 	Client struct {
-		conf ClientConf
-		conn net.Conn
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		conf  ClientConf
+		conns map[net.Conn]struct{}
+		agent func(net.Conn) network.Agent
+		flag  bool
 	}
 )
 
 func NewClient(conf ClientConf) (*Client, error) {
-	client := &Client{conf: conf}
-
-	conn, err := net.Dial("unix", conf.Path)
-	if err != nil {
-		return nil, err
+	client := &Client{
+		conf:  conf,
+		conns: make(map[net.Conn]struct{}),
 	}
-	client.conn = conn
-
-	go client.init()
 
 	return client, nil
 }
 
-func (c *Client) Read() {
-	buf := make([]byte, 1024)
-	for {
-		n, err := c.conn.Read(buf[:])
-		if err != nil {
-			return
-		}
-		println("Client got:", string(buf[0:n]))
-	}
+// WithAgent sets the agent function for the client.
+func (c *Client) WithAgent(agent func(net.Conn) network.Agent) *Client {
+	c.agent = agent
+	return c
 }
 
-func (c *Client) init() error {
-	for {
-		_, err := c.conn.Write([]byte("hi"))
-		if err != nil {
-			log.Fatal("write error:", err)
-			break
-		}
-		time.Sleep(1e9)
+// Connect establishes a Unix domain socket connection to the server and starts the agent.
+func (c *Client) Connect() error {
+	if c.flag {
+		return errors.New("client stopped")
 	}
+
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+
+		if err := c.connect(); err != nil {
+			xlog.Write().Sugar().Errorf("unix client connect error: %w", err)
+		}
+	}()
+
 	return nil
 }
 
-func (c *Client) Stop() {
+// connect establishes a Unix domain socket connection to the server and starts the agent.
+func (c *Client) connect() error {
+	conn, err := c.dial()
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.conns[conn] = struct{}{}
+	c.mu.Unlock()
+	if c.agent == nil {
+		return errors.New("agent not set")
+	}
+	agent := c.agent(conn)
+	agent.Run()
 
+	conn.Close()
+	agent.OnClose()
+	c.mu.Lock()
+	delete(c.conns, conn)
+	c.mu.Unlock()
+	return nil
+}
+
+// dial establishes a Unix domain socket connection to the server.
+func (c *Client) dial() (net.Conn, error) {
+	conn, err := net.Dial("unix", c.conf.Path)
+	if err != nil {
+		xlog.Write().Sugar().Errorf("unix conn error: %w", err)
+		return nil, err
+	}
+	return conn, nil
+}
+
+// Stop stops the client and closes all active connections.
+func (c *Client) Stop() {
+	c.mu.Lock()
+
+	if c.flag {
+		c.mu.Unlock()
+		return
+	}
+	c.flag = true
+
+	for conn := range c.conns {
+		conn.Close()
+		delete(c.conns, conn)
+	}
+	c.mu.Unlock()
+	c.wg.Wait()
 }
