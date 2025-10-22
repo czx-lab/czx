@@ -318,7 +318,7 @@ func (l *Loop) processFrame(execEmpty bool) {
 	// Increment the frame ID for the next frame
 	frame := Frame{
 		FrameID: l.current.FrameID + 1,
-		Inputs:  make(map[string]Message),
+		Inputs:  make(map[string][]Message),
 	}
 
 	if l.conf.DelayFrames > 0 {
@@ -339,16 +339,13 @@ func (l *Loop) processFrame(execEmpty bool) {
 
 			// Check if the sequence ID is as expected
 			// If not, resend the expected sequence ID to the player
-			if l.conf.Resend {
-				expectedSeqID := l.current.Inputs[playerID].SequenceID + 1
-				if messages[0].SequenceID != expectedSeqID {
-					l.frameProc.Resend(playerID, expectedSeqID)
-					continue
-				}
+			if l.conf.Resend && messages[0].SequenceID != int(l.current.FrameID)+1 {
+				l.frameProc.Resend(playerID, int(l.current.FrameID)+1)
+				continue
 			}
 
-			frame.Inputs[playerID] = messages[0]
-			l.inFrameQueue[playerID] = messages[1:]
+			frame.Inputs[playerID] = messages
+			l.inFrameQueue[playerID] = nil
 			continue
 		}
 
@@ -359,13 +356,14 @@ func (l *Loop) processFrame(execEmpty bool) {
 			delete(l.inFrameQueue, playerID)
 			continue
 		}
-
 		// If the queue is empty, fill it with default values
-		frame.Inputs[playerID] = Message{
-			PlayerID:   playerID,
-			SequenceID: l.current.Inputs[playerID].SequenceID + 1,
-			Timestamp:  time.Now(),
-			Data:       nil, // Default fill data
+		frame.Inputs[playerID] = []Message{
+			{
+				PlayerID:   playerID,
+				SequenceID: int(l.current.FrameID) + 1,
+				Timestamp:  time.Now(),
+				Data:       nil, // Default fill data
+			},
 		}
 	}
 
