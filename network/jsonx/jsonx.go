@@ -17,14 +17,9 @@ type (
 		messages map[string]*message
 	}
 	message struct {
-		name       string
-		msgtype    reflect.Type
-		handler    network.Handler
-		rawHandler network.Handler
-	}
-	Raw struct {
-		name string
-		data json.RawMessage
+		name    string
+		msgtype reflect.Type
+		handler network.Handler
 	}
 )
 
@@ -77,18 +72,6 @@ func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
 
 // Process implements network.Processor.
 func (p *Processor) Process(data any, agent network.Agent) error {
-	if raw, ok := data.(Raw); ok {
-		rawinfo, ok := p.messages[raw.name]
-		if !ok {
-			return fmt.Errorf("message %v not registered", raw.name)
-		}
-		if rawinfo.rawHandler != nil {
-			rawinfo.rawHandler([]any{raw.name, raw.data, agent})
-		}
-
-		return nil
-	}
-
 	msgname := reflect.TypeOf(data).Elem().Name()
 	info, ok := p.messages[msgname]
 	if !ok {
@@ -142,23 +125,6 @@ func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 	return nil
 }
 
-// RegisterRawHandler implements network.JsonProcessor.
-func (p *Processor) RegisterRawHandler(msg any, handler network.Handler) error {
-	msgtype := reflect.TypeOf(msg)
-	if msgtype == nil || msgtype.Kind() != reflect.Ptr {
-		return errors.New("json message pointer required")
-	}
-
-	msgname := msgtype.Elem().Name()
-	info, ok := p.messages[msgname]
-	if !ok {
-		return fmt.Errorf("message %v not registered", msgname)
-	}
-
-	info.rawHandler = handler
-	return nil
-}
-
 // Unmarshal implements network.Processor.
 func (p *Processor) Unmarshal(data []byte) (any, error) {
 	var m map[string]json.RawMessage
@@ -175,12 +141,8 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 			return nil, fmt.Errorf("message %v not registered", msgname)
 		}
 
-		if info.rawHandler != nil {
-			return Raw{msgname, data}, nil
-		} else {
-			msg := reflect.New(info.msgtype.Elem()).Interface()
-			return msg, json.Unmarshal(data, msg)
-		}
+		msg := reflect.New(info.msgtype.Elem()).Interface()
+		return msg, json.Unmarshal(data, msg)
 	}
 
 	return nil, errors.New("invalid json data")
