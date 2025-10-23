@@ -32,14 +32,8 @@ var _ RoomProcessor = (*roomprocessor)(nil)
 type normalProcessorMock struct{}
 
 // Close implements NormalProcessor.
-func (n *normalProcessorMock) Close() {
+func (n *normalProcessorMock) OnClose() {
 	fmt.Println("normalProcessorMock closed")
-}
-
-// HandleIdle implements NormalProcessor.
-func (n *normalProcessorMock) HandleIdle() {
-	fmt.Println("normalProcessorMock handle idle")
-
 }
 
 // Process implements NormalProcessor.

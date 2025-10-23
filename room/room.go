@@ -116,7 +116,7 @@ func (r *Room) WriteMessage(msg frame.Message) error {
 	if r.loop == nil {
 		return ErrLoopNotFound
 	}
-	return r.loop.Receive(msg)
+	return r.loop.Write(msg)
 }
 
 // Join is used to add a player to the room
