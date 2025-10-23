@@ -67,10 +67,6 @@ Zmq 编译
 ---------------
 - windows
 ```shell
-# cmd
-set CGO_CFLAGS=-ID:/tools/vcpkg/installed/x64-windows/include
-set CGO_LDFLAGS=-LD:/tools/vcpkg/installed/x64-windows/bin -l:libzmq-mt-4_3_5.dll
-
 # powershell
 $env:PATH += ";D:/tools/vcpkg/installed/x64-windows/bin"
 $env:CGO_CFLAGS='-ID:/tools/vcpkg/installed/x64-windows/include'
