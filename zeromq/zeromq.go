@@ -62,7 +62,7 @@ func NewZeromq(conf ZeromqConf) (*Zeromq, error) {
 func (zq *Zeromq) connect() (socket *zmq.Socket, err error) {
 	ctx, err := zmq.NewContext()
 	if err != nil {
-		return
+		return nil, err
 	}
 	socket, err = ctx.NewSocket(zq.conf.Type)
 	if err != nil {
@@ -168,8 +168,8 @@ func (zq *Zeromq) Router(call func(identity []byte, message []byte) []byte) erro
 			body := message[2]
 			resp := call(identity, body)
 			// send false to client
-			zq.socket.SendBytes(identity, zmq.SNDMORE)
-			zq.socket.SendBytes(delimiter, zmq.SNDMORE)
+			zq.socket.SendBytes(identity, zmq.Flag(zmq.SNDMORE))
+			zq.socket.SendBytes(delimiter, zmq.Flag(zmq.SNDMORE))
 			zq.socket.SendBytes(resp, 0)
 		}
 	}()
@@ -181,7 +181,7 @@ func (zq *Zeromq) Pub(topic string, message []byte) error {
 	if zq.conf.Type != zmq.PUB {
 		return fmt.Errorf("socket type %v does not support Pub mode", zq.conf.Type)
 	}
-	_, err := zq.socket.SendBytes([]byte(topic), zmq.SNDMORE)
+	_, err := zq.socket.SendBytes([]byte(topic), zmq.Flag(zmq.SNDMORE))
 	if err != nil {
 		return err
 	}

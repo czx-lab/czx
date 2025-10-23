@@ -62,3 +62,17 @@ Czx 源码概览
 - czx/room 提供房间的创建、管理，以及房间玩家匹配机制
 - czx/timer 定时器相关
 - czx/xlog 日志相关
+
+Zmq 编译
+---------------
+- windows
+```shell
+# cmd
+set CGO_CFLAGS=-ID:/tools/vcpkg/installed/x64-windows/include
+set CGO_LDFLAGS=-LD:/tools/vcpkg/installed/x64-windows/bin -l:libzmq-mt-4_3_5.dll
+
+# powershell
+$env:CGO_CFLAGS='-ID:/tools/vcpkg/installed/x64-windows/include'
+# $env:CGO_LDFLAGS='-LD:/tools/vcpkg/installed/x64-windows/lib -l:libzmq-mt-4_3_5.lib'
+$env:CGO_LDFLAGS='-LD:/tools/vcpkg/installed/x64-windows/bin -l:libzmq-mt-4_3_5.dll'
+```
