@@ -9,14 +9,8 @@ import (
 type normalProcessorMock struct{}
 
 // Close implements NormalProcessor.
-func (n *normalProcessorMock) Close() {
+func (n *normalProcessorMock) OnClose() {
 	fmt.Println("normalProcessorMock closed")
-}
-
-// HandleIdle implements NormalProcessor.
-func (n *normalProcessorMock) HandleIdle() {
-	fmt.Println("normalProcessorMock handle idle")
-
 }
 
 // Process implements NormalProcessor.
@@ -34,14 +28,9 @@ func (f *frameProcessorMock) Resend(playerId string, sequenceID int) {
 }
 
 // Close implements FrameProcessor.
-func (f *frameProcessorMock) Close() {
+func (f *frameProcessorMock) OnClose() {
 	fmt.Println("frameProcessorMock closed")
 
-}
-
-// HandleIdle implements FrameProcessor.
-func (f *frameProcessorMock) HandleIdle() {
-	fmt.Println("frameProcessorMock handle idle")
 }
 
 // Process implements FrameProcessor.
@@ -55,26 +44,19 @@ func TestLoop(t *testing.T) {
 	t.Run("TestNormalLoop", func(t *testing.T) {
 		// Create a new loop with default configuration
 		loop, _ := NewLoop(LoopConf{
-			Frequency:          60,
-			HeartbeatFrequency: 5,
-			LoopType:           LoopTypeNormal,
+			Frequency: 60,
+			LoopType:  LoopTypeNormal,
 		})
 		if err := loop.WithNormalProc(&normalProcessorMock{}); err != nil {
 			t.Fatalf("Failed to set normal processor: %v", err)
 		}
-		loop.WithEmptyHandler(&EmptyProcessor{
-			Handler: func() {
-				fmt.Println("Empty handler called")
-			},
-			Frequency: 3 * time.Second,
-		})
 
 		// Start the loop
 		go loop.Start()
 
 		// Simulate sending messages to the loop
 		for i := range 10 {
-			loop.Receive(Message{
+			loop.Write(Message{
 				PlayerID:  fmt.Sprintf("Player%d", i),
 				Data:      []byte(fmt.Sprintf("Input from Player%d", i%3)),
 				Timestamp: time.Now(),
@@ -90,9 +72,8 @@ func TestLoop(t *testing.T) {
 	t.Run("TestSyncLoop", func(t *testing.T) {
 		// Create a new loop with default configuration
 		loop, _ := NewLoop(LoopConf{
-			Frequency:          60,
-			HeartbeatFrequency: 5,
-			LoopType:           LoopTypeSync,
+			Frequency: 60,
+			LoopType:  LoopTypeFream,
 		})
 		if err := loop.WithFrameProc(&frameProcessorMock{}); err != nil {
 			t.Fatalf("Failed to set normal processor: %v", err)
@@ -103,7 +84,7 @@ func TestLoop(t *testing.T) {
 
 		// Simulate sending messages to the loop
 		for i := range 10 {
-			loop.Receive(Message{
+			loop.Write(Message{
 				PlayerID:  fmt.Sprintf("Player%d", i),
 				Data:      []byte(fmt.Sprintf("Input from Player%d", i%3)),
 				Timestamp: time.Now(),
@@ -114,7 +95,7 @@ func TestLoop(t *testing.T) {
 
 		// Simulate sending messages to the loop
 		for i := range 10 {
-			loop.Receive(Message{
+			loop.Write(Message{
 				PlayerID:  fmt.Sprintf("Player_next%d", i),
 				Data:      []byte(fmt.Sprintf("Input next from Player%d", i%3)),
 				Timestamp: time.Now(),
@@ -158,20 +139,16 @@ func TestFrame(t *testing.T) {
 	// Create a new frame
 	frame := Frame{
 		FrameID: 1,
-		Inputs: map[string][]Message{
+		Inputs: map[string]Message{
 			"Player1": {
-				{
-					PlayerID:  "Player1",
-					Data:      []byte("Input data"),
-					Timestamp: time.Now(),
-				},
+				PlayerID:  "Player1",
+				Data:      []byte("Input data"),
+				Timestamp: time.Now(),
 			},
 			"Player2": {
-				{
-					PlayerID:  "Player2",
-					Data:      []byte("Input data"),
-					Timestamp: time.Now(),
-				},
+				PlayerID:  "Player2",
+				Data:      []byte("Input data"),
+				Timestamp: time.Now(),
 			},
 		},
 	}
@@ -192,12 +169,10 @@ func TestFrame(t *testing.T) {
 	if frame.FrameID != deserializedFrame.FrameID || len(frame.Inputs) != len(deserializedFrame.Inputs) {
 		t.Errorf("Original and deserialized frames are not equal: %+v vs %+v", frame, deserializedFrame)
 	}
-	for playerID, messages := range frame.Inputs {
+	for playerID, message := range frame.Inputs {
 		deserializedMessage, ok := deserializedFrame.Inputs[playerID]
-		for i, message := range messages {
-			if !ok || message.PlayerID != deserializedMessage[i].PlayerID || string(message.Data) != string(deserializedMessage[i].Data) {
-				t.Errorf("Original and deserialized messages are not equal: %+v vs %+v", message, deserializedMessage)
-			}
+		if !ok || message.PlayerID != deserializedMessage.PlayerID || string(message.Data) != string(deserializedMessage.Data) {
+			t.Errorf("Original and deserialized messages are not equal: %+v vs %+v", message, deserializedMessage)
 		}
 	}
 	// Check if the original and deserialized frames are equal

@@ -3,15 +3,12 @@ module github.com/czx-lab/czx
 go 1.24.2
 
 // The following versions have been retracted due to compatibility issues or critical bugs. Do not use them.
-retract (
-    v1.0.1-v1.11.2
-)
+retract v1.0.1-v1.11.2
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.41.1
-	github.com/panjf2000/ants/v2 v2.11.0
 	github.com/panjf2000/gnet/v2 v2.7.2
 	github.com/pebbe/zmq4 v1.4.0
 	github.com/xtaci/kcp-go/v5 v5.6.22
@@ -27,6 +24,7 @@ require (
 	github.com/klauspost/reedsolomon v1.12.0 // indirect
 	github.com/nats-io/nkeys v0.4.9 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
+	github.com/panjf2000/ants/v2 v2.11.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/templexxx/cpu v0.1.1 // indirect
 	github.com/templexxx/xorsimd v0.4.3 // indirect

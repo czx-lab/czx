@@ -2,44 +2,29 @@ package frame
 
 import (
 	"errors"
-	"fmt"
-	"math"
-	"sort"
 	"sync"
 	"time"
 
-	"github.com/czx-lab/czx/container/cqueue"
 	"github.com/czx-lab/czx/xlog"
-	"github.com/panjf2000/ants/v2"
 )
 
 const (
 	// game logic frame processing frequency
-	frequency          uint = 30
-	maxQueueSize       uint = 100 // Maximum input queue size per player
-	heartbeatFrequency uint = 5   // Heartbeat frequency in seconds
-	poolSize           int  = 20  // Size of the worker pool
-	expandThreshold    int  = 10  // Threshold for expanding the worker pool
-	shrinkThreshold    int  = 5   // Threshold for shrinking the worker pool
+	frequency    uint = 30
+	maxQueueSize uint = 100 // Maximum input queue size per player
 
 	// LoopTypeNormal indicates a normal game loop
 	LoopTypeNormal = "normal"
-	// LoopTypeSync indicates a synchronous game loop
-	LoopTypeSync = "sync"
+	// LoopTypeFream indicates a synchronous game loop
+	LoopTypeFream = "frame"
 )
 
 type (
 	LoopConf struct {
 		// frequency of game logic frame processing
-		Frequency          uint
-		HeartbeatFrequency uint
-		MaxQueueSize       uint
-		LoopType           string // Type of loop, e.g., "normal" or "sync"
-		MinPoolSize        int    // Minimum size of the worker pool
-		MaxPoolSize        int    // Maximum size of the worker pool
-		DefaultFill        bool   // Whether to fill the queue with default values
-		DelayFrames        int    // Number of frames to delay processing
-		Resend             bool   // Whether to resend messages if the sequence ID is not as expected
+		Frequency    uint
+		LoopType     string // Type of loop, e.g., "normal" or "frame"
+		MaxQueueSize uint   // Maximum input queue size per player
 	}
 
 	Loop struct {
@@ -51,73 +36,32 @@ type (
 		// Processor interface for processing game logic
 		frameProc  FrameProcessor
 		normalProc NormalProcessor
-		// Current frame being processed
-		current Frame
+		frameId    uint64 // Current frame ID
 		// Input queue for each player
-		inFrameQueue map[string][]Message
+		frameQueue map[string]Message
+		playerIds  map[string]uint
 		// Channel for normal processing
-		inNormalQueue chan Message
-		// Handler for empty processing
-		eproc    *EmptyProcessor
-		workpool *ants.Pool
-		queue    *cqueue.Queue[Frame] // Queue for storing frames
-		// delayed frames
-		delayedFrames map[uint64]Frame
-		curPoolSize   int // Current size of the worker pool
+		normalQueue chan Message
 	}
 )
 
 func NewLoop(conf LoopConf) (*Loop, error) {
 	defaultConf(&conf)
 
-	opts := []ants.Option{
-		ants.WithNonblocking(true),
-		ants.WithPreAlloc(true),
-		ants.WithDisablePurge(true),
-	}
-	workerpool, err := ants.NewPool(conf.MinPoolSize, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create worker pool: %w", err)
-	}
-
 	loop := &Loop{
-		conf:        conf,
-		quit:        make(chan struct{}),
-		adjust:      make(chan struct{}, 1), // Add buffer to avoid blocking
-		workpool:    workerpool,
-		curPoolSize: workerpool.Cap(),
+		conf:   conf,
+		quit:   make(chan struct{}),
+		adjust: make(chan struct{}, 1), // Add buffer to avoid blocking
 	}
 	if conf.LoopType == LoopTypeNormal {
-		loop.inNormalQueue = make(chan Message, conf.MaxQueueSize)
+		loop.normalQueue = make(chan Message, conf.MaxQueueSize)
 	}
-	if conf.DelayFrames > 0 {
-		loop.delayedFrames = make(map[uint64]Frame)
-	}
-	if conf.LoopType == LoopTypeSync {
-		loop.queue = cqueue.NewQueue[Frame](0)
-		loop.inFrameQueue = make(map[string][]Message)
+	if conf.LoopType == LoopTypeFream {
+		loop.frameQueue = make(map[string]Message)
+		loop.playerIds = make(map[string]uint)
 	}
 
 	return loop, nil
-}
-
-func (l *Loop) WithEmptyHandler(proc *EmptyProcessor) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if proc == nil {
-		return errors.New("empty processor cannot be nil")
-	}
-	if proc.Handler == nil {
-		return errors.New("empty processor handler cannot be nil")
-	}
-	if proc.Frequency <= time.Millisecond {
-		return errors.New("empty processor frequency must be greater than 0")
-	}
-
-	l.eproc = proc
-
-	return nil
 }
 
 // WithNormalProc sets the normal processor for the loop.
@@ -140,7 +84,7 @@ func (l *Loop) WithFrameProc(frameProc FrameProcessor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.conf.LoopType != LoopTypeSync {
+	if l.conf.LoopType != LoopTypeFream {
 		return errors.New("frame processor can only be set for sync loop type")
 	}
 
@@ -152,44 +96,24 @@ func (l *Loop) WithFrameProc(frameProc FrameProcessor) error {
 // Start starts the game loop, processing frames at the specified frequency.
 // It uses a ticker to trigger the processing at regular intervals.
 func (l *Loop) Start() {
-	if l.workpool.IsClosed() {
-		l.workpool.Reboot()
-	}
-
 	frequency := time.Second / time.Duration(l.conf.Frequency)
 	ticker := time.NewTicker(frequency)
 	defer ticker.Stop()
 
 	go func() {
-		lastHeartbeat := time.Now() // Track the last heartbeat time
-		lastEmptyTime := time.Now() // Track the last empty time
-
 		for {
 			select {
 			case <-l.quit:
 				return
 			case <-ticker.C:
-				var isExecEmpty bool
-
-				if l.eproc != nil && time.Since(lastEmptyTime) >= l.eproc.Frequency {
-					isExecEmpty = true
-					lastEmptyTime = time.Now() // Update the last empty time
-				}
-
 				switch l.conf.LoopType {
 				case LoopTypeNormal:
 					// Process normal messages
-					l.processNormal(isExecEmpty)
-				case LoopTypeSync:
+					l.processN()
+				case LoopTypeFream:
 					// Process the current frame and its inputs
-					l.processFrame(isExecEmpty)
+					l.processF()
 				}
-
-				// Check for heartbeat
-				lastHeartbeat = l.checkHeartbeat(lastHeartbeat)
-
-				// Tune the worker pool size based on the number of waiting tasks
-				l.workerPoolTune()
 			}
 		}
 	}()
@@ -200,39 +124,13 @@ func (l *Loop) Start() {
 	// Close the frame processor when the loop stops
 	switch l.conf.LoopType {
 	case LoopTypeNormal:
-		l.normalProc.Close()
-	case LoopTypeSync:
-		l.frameProc.Close()
-	}
-}
-
-// workerPoolTune dynamically adjusts the size of the worker pool based on the number of waiting tasks.
-// It expands the pool size if there are many waiting tasks and shrinks it if there are few waiting tasks.
-func (l *Loop) workerPoolTune() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	// If the worker pool is closed, do not tune it
-	if l.workpool.IsClosed() {
-		return
-	}
-	waiting := l.workpool.Waiting()
-
-	// If there are many waiting tasks, expand the worker pool size
-	// but ensure it does not exceed the maximum pool size
-	if waiting > expandThreshold && l.curPoolSize < l.conf.MaxPoolSize {
-		newSize := min(l.curPoolSize+(waiting/2), l.conf.MaxPoolSize)
-		l.workpool.Tune(newSize) // Increase the worker pool size if there are waiting tasks
-		l.curPoolSize = newSize
-		return
-	}
-
-	// If there are few waiting tasks, shrink the worker pool size
-	// but ensure it does not go below the minimum pool size
-	if waiting < shrinkThreshold && l.curPoolSize > l.conf.MinPoolSize {
-		newSize := max(l.curPoolSize-(waiting/2), l.conf.MinPoolSize)
-		l.workpool.Tune(newSize) // Decrease the worker pool size if there are few waiting tasks
-		l.curPoolSize = newSize
+		if l.normalProc != nil {
+			l.normalProc.OnClose()
+		}
+	case LoopTypeFream:
+		if l.frameProc != nil {
+			l.frameProc.OnClose()
+		}
 	}
 }
 
@@ -256,156 +154,56 @@ func (l *Loop) monitorFrequency(ticker *time.Ticker) {
 
 // Process normal messages from the input queue.
 // It handles the processing of messages in the normal loop type.
-func (l *Loop) processNormal(execEmpty bool) {
-	select {
-	case message := <-l.inNormalQueue:
-		l.workpool.Submit(func() {
-			defer func() {
-				if r := recover(); r != nil {
-					xlog.Write().Sugar().Errorf("Recovered from panic in processor: %v", r)
-				}
-			}()
-
+func (l *Loop) processN() {
+	// Process all available messages without blocking
+	for {
+		select {
+		case message := <-l.normalQueue:
 			l.normalProc.Process(message)
-		})
-	default:
-		if l.eproc != nil && l.eproc.Handler != nil && execEmpty {
-			l.eproc.Handler()
+		default:
+			// No more messages available, return
+			return
 		}
 	}
-}
-
-// delayedFrame checks if the frame is delayed and returns the delayed frame if available.
-// It uses a map to store delayed frames and checks if the current frame is ready for processing.
-func (l *Loop) delayedFrame(frame Frame) *Frame {
-	delayFrameID := frame.FrameID - uint64(l.conf.DelayFrames)
-	if delayFrameID <= 0 {
-		l.delayedFrames[frame.FrameID] = frame
-		return nil
-	} else {
-		// Check if the delayed frame is ready for processing
-		if delayedFrame, ok := l.delayedFrames[delayFrameID]; ok {
-			frame = delayedFrame                  // Use the delayed frame
-			delete(l.delayedFrames, delayFrameID) // Remove the processed frame from the map
-		}
-	}
-
-	// Check if the frame is delayed
-	if _, ok := l.delayedFrames[frame.FrameID]; ok {
-		return nil
-	}
-
-	// Add the frame to the delayed frames map
-	l.delayedFrames[frame.FrameID] = frame
-
-	return &frame
 }
 
 // process processes the current frame and its inputs, and prepares the next frame.
 // It handles the input queue for each player and updates the current frame accordingly.
-func (l *Loop) processFrame(execEmpty bool) {
+func (l *Loop) processF() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if len(l.inFrameQueue) == 0 {
-		if l.eproc != nil && l.eproc.Handler != nil && execEmpty {
-			l.eproc.Handler()
-		}
-		return
-	}
+	l.frameId++
 
-	// Create a new frame for processing
-	// Increment the frame ID for the next frame
+	// Create a new frame with the current frame ID
 	frame := Frame{
-		FrameID: l.current.FrameID + 1,
-		Inputs:  make(map[string][]Message),
+		FrameID: l.frameId,
+		Inputs:  make(map[string]Message),
 	}
 
-	if l.conf.DelayFrames > 0 {
-		delayFrame := l.delayedFrame(frame)
-		if delayFrame != nil {
-			frame = *delayFrame
-		}
-	}
-
-	// Process the current frame and its inputs
-	for playerID, messages := range l.inFrameQueue {
-		if len(messages) > 0 {
-			// Sort messages by timestamp
-			// This ensures that the earliest message is processed first
-			sort.SliceStable(messages, func(i, j int) bool {
-				return messages[i].Timestamp.Unix() < messages[j].Timestamp.Unix()
-			})
-
-			// Check if the sequence ID is as expected
-			// If not, resend the expected sequence ID to the player
-			if l.conf.Resend && messages[0].SequenceID != int(l.current.FrameID)+1 {
-				l.frameProc.Resend(playerID, int(l.current.FrameID)+1)
-				continue
-			}
-
-			frame.Inputs[playerID] = messages
-			l.inFrameQueue[playerID] = nil
+	// Process inputs for all registered players
+	for playerId := range l.playerIds {
+		if input, ok := l.frameQueue[playerId]; ok {
+			// Player has input for this frame
+			frame.Inputs[playerId] = input
+			// Update the last processed frame ID for the player
+			l.playerIds[playerId] = uint(input.FrameID)
 			continue
 		}
-
-		if !l.conf.DefaultFill {
-			// Ensure the player's input map is cleared if no messages are left
-			delete(l.current.Inputs, playerID)
-			// If the queue is empty, remove the player from the inFrameQueue
-			delete(l.inFrameQueue, playerID)
-			continue
+		// If no input from the player, create an empty message
+		emptyMessage := Message{
+			PlayerID:  playerId,
+			FrameID:   int(l.frameId),
+			Timestamp: time.Now(),
 		}
-		// If the queue is empty, fill it with default values
-		frame.Inputs[playerID] = []Message{
-			{
-				PlayerID:   playerID,
-				SequenceID: int(l.current.FrameID) + 1,
-				Timestamp:  time.Now(),
-				Data:       nil, // Default fill data
-			},
-		}
+		frame.Inputs[playerId] = emptyMessage
 	}
 
-	// Push the current frame to the queue
-	l.queue.Push(frame)
-	l.current = frame // Update the current frame
+	// Clear the frame queue for the next frame
+	l.frameQueue = make(map[string]Message)
 
-	l.workpool.Submit(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				xlog.Write().Sugar().Errorf("Recovered from panic in processor: %v", r)
-			}
-		}()
-
-		if nextFrame, ok := l.queue.Pop(); ok {
-			l.frameProc.Process(nextFrame)
-		}
-	})
-}
-
-// Handle heartbeat if the interval has passed
-func (l *Loop) checkHeartbeat(lastHeartbeat time.Time) time.Time {
-	frequency := time.Second * time.Duration(l.conf.HeartbeatFrequency)
-	if time.Since(lastHeartbeat) >= frequency {
-		var handler func()
-		switch l.conf.LoopType {
-		case LoopTypeNormal:
-			handler = l.normalProc.HandleIdle
-		case LoopTypeSync:
-			handler = l.frameProc.HandleIdle
-		}
-
-		handler()
-
-		lastHeartbeat = time.Now() // Update the last heartbeat time
-	}
-
-	if time.Since(lastHeartbeat) >= 2*frequency {
-		xlog.Write().Sugar().Warnf("Heartbeat timeout detected! Last heartbeat was %v ago", time.Since(lastHeartbeat))
-	}
-
-	return lastHeartbeat
+	// Process the frame
+	l.frameProc.Process(frame)
 }
 
 // Stop stops the game loop and releases any resources.
@@ -417,40 +215,80 @@ func (l *Loop) Stop() {
 	select {
 	case <-l.quit:
 		// Already stopped
+		return
 	default:
 		close(l.quit) // Signal all goroutines to stop
 	}
 
-	// Release the worker pool
-	l.workpool.Release()
+	// Close the normal queue if it exists
+	if l.normalQueue != nil {
+		close(l.normalQueue)
+	}
 
 	// Note: No need to close the `adjust` channel.
 	// It is only used for signaling and will be garbage collected when `Loop` is no longer referenced.
 }
 
-// Receive receives a message and adds it to the input queue for processing.
-// It enforces a maximum queue size for each player in the sync loop type.
-func (l *Loop) Receive(in Message) error {
+// Write writes an input message to the loop's input queue.
+// It enforces the maximum queue size and handles stale messages.
+func (l *Loop) Write(in Message) error {
 	if l.conf.LoopType == LoopTypeNormal {
 		select {
-		case l.inNormalQueue <- in:
+		case l.normalQueue <- in:
 			return nil
 		default:
 			return errors.New("input queue is full")
 		}
 	}
 
-	// Enforce maximum queue size
+	// For frame-based processing
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if len(l.inFrameQueue[in.PlayerID]) >= int(l.conf.MaxQueueSize) {
-		return fmt.Errorf("input queue for player %s is full, dropping message", in.PlayerID)
+	// Check if player is registered
+	if _, exists := l.playerIds[in.PlayerID]; !exists {
+		return errors.New("player not registered")
 	}
 
-	l.inFrameQueue[in.PlayerID] = append(l.inFrameQueue[in.PlayerID], in)
+	// Check for stale messages
+	if existing, ok := l.frameQueue[in.PlayerID]; ok && existing.FrameID >= in.FrameID {
+		return errors.New("stale or duplicate message")
+	}
 
+	// Only accept messages for current or future frames
+	if in.FrameID <= int(l.frameId) {
+		return errors.New("message for past frame")
+	}
+
+	l.frameQueue[in.PlayerID] = in
 	return nil
+}
+
+// RegisterPlayer registers a new player in the loop.
+// It initializes the player's last processed frame ID.
+func (l *Loop) RegisterPlayer(playerId string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	lastFrameId, ok := l.playerIds[playerId]
+	if !ok {
+		// Initialize the last processed frame ID for the player
+		l.playerIds[playerId] = uint(l.frameId)
+		return
+	}
+
+	// Resend the last processed frame to the player
+	l.frameProc.Resend(playerId, int(lastFrameId))
+}
+
+// UnregisterPlayer removes a player from the loop.
+// It deletes the player's input queue and last processed frame ID.
+func (l *Loop) UnregisterPlayer(playerId string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	delete(l.playerIds, playerId)
+	delete(l.frameQueue, playerId)
 }
 
 // This method allows you to change the frequency of the game loop at runtime
@@ -481,19 +319,10 @@ func defaultConf(conf *LoopConf) {
 	if conf.Frequency == 0 {
 		conf.Frequency = frequency
 	}
-	if conf.MaxQueueSize == 0 {
-		conf.MaxQueueSize = maxQueueSize
-	}
 	if len(conf.LoopType) == 0 {
 		conf.LoopType = LoopTypeNormal
 	}
-	if conf.HeartbeatFrequency == 0 {
-		conf.HeartbeatFrequency = heartbeatFrequency
-	}
-	if conf.MinPoolSize == 0 {
-		conf.MinPoolSize = poolSize
-	}
-	if conf.MaxPoolSize == 0 {
-		conf.MaxPoolSize = math.MaxInt
+	if conf.MaxQueueSize == 0 {
+		conf.MaxQueueSize = maxQueueSize
 	}
 }
