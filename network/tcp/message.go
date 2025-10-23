@@ -27,7 +27,7 @@ type (
 	// Length type for message length field
 	LenType           uint
 	MessageParserConf struct {
-		// Type of the message length field (0: uint8, 1: uint16, 2: uint32)
+		// Type of the message length field (1: uint8, 2: uint16, 4: uint32)
 		MsgLengthType LenType
 		// Minimum message size
 		MsgMinSize uint32
