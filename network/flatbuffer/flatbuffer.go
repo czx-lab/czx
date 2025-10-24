@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	"github.com/czx-lab/czx/network"
+	fb "github.com/google/flatbuffers/go"
 )
 
 type (
@@ -147,7 +148,9 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 		return nil, fmt.Errorf("flatbuffers: message %s does not have Init method", info.type_)
 	}
 
-	_ = method.Call([]reflect.Value{reflect.ValueOf(data[2:])})
+	buf := data[2:]
+	pos := fb.GetUOffsetT(buf)
+	_ = method.Call([]reflect.Value{reflect.ValueOf(buf), reflect.ValueOf(pos)})
 	return msg, nil
 }
 
