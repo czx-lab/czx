@@ -207,19 +207,17 @@ func (a *agent) OnPreConn(data network.ClientAddrMessage) {
 
 // React implements network.GnetAgent.
 func (a *agent) React(data []byte) {
-	if a.gate.processor == nil {
-		a.conn.Close()
+	if a.conn == nil {
 		return
 	}
-
-	msg, err := a.gate.processor.Unmarshal(data)
-	if err != nil {
-		xlog.Write().Debug("network processor message decoding error", zap.Error(err))
+	write, ok := a.conn.(interface {
+		WriteBuffer(data []byte) (n int, err error)
+	})
+	if !ok {
 		return
 	}
-	if err = a.gate.processor.Process(msg, a); err != nil {
-		xlog.Write().Debug("network message processor error", zap.Error(err))
-		return
+	if _, err := write.WriteBuffer(data); err != nil {
+		xlog.Write().Error("gnet agent write buffer error", zap.Error(err))
 	}
 }
 

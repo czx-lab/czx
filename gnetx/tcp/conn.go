@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"errors"
 	"net"
 	"sync"
 
@@ -15,6 +16,9 @@ var (
 )
 
 type (
+	// Conns is a map of network connections
+	Conns map[network.Conn]struct{}
+
 	GnetTcpConnConf struct {
 		// Number of pending writes
 		PendingWrite int
@@ -29,6 +33,7 @@ type (
 		// Queue for outgoing data
 		writeQueue chan []byte
 		parse      *xtcp.MessageParser
+		gbuffer    *GBuffer
 		clientAddr network.ClientAddrMessage
 	}
 )
@@ -42,6 +47,7 @@ func NewGnetConn(c gnet.Conn, conf *GnetTcpConnConf) *GnetConn {
 		gnetconn:   c,
 		conf:       conf,
 		writeQueue: make(chan []byte, conf.PendingWrite),
+		gbuffer:    NewGBuffer(),
 	}
 	gnetconn.init()
 
@@ -75,6 +81,11 @@ func (g *GnetConn) init() {
 func (g *GnetConn) WithParse(parse *xtcp.MessageParser) *GnetConn {
 	g.parse = parse
 	return g
+}
+
+// WriteBuffer writes data to the GBuffer.
+func (g *GnetConn) WriteBuffer(data []byte) (n int, err error) {
+	return g.gbuffer.Write(data)
 }
 
 // Close implements network.Conn.
@@ -125,11 +136,14 @@ func (g *GnetConn) LocalAddr() net.Addr {
 }
 
 // ReadMessage implements network.Conn.
-//
-// NOTE: GnetConn does not support reading messages directly. Instead, it uses the gnet framework's event loop to handle incoming messages asynchronously.
-// This method is a placeholder and should not be used directly.
 func (g *GnetConn) ReadMessage() (b []byte, err error) {
-	return
+	g.Lock()
+	defer g.Unlock()
+
+	if g.done {
+		return nil, errors.New("connection is closed")
+	}
+	return g.parse.Read(g.gbuffer)
 }
 
 // RemoteAddr implements network.Conn.
@@ -151,6 +165,19 @@ func (g *GnetConn) withClientAddr(msg network.ClientAddrMessage) {
 // WriteMessage implements network.Conn.
 func (g *GnetConn) WriteMessage(args ...[]byte) error {
 	return g.parse.Write(g, args...)
+}
+
+// Write implements io.Writer.
+func (g *GnetConn) Write(p []byte) (n int, err error) {
+	g.Lock()
+	defer g.Unlock()
+
+	if g.done || p == nil {
+		return 0, errors.New("dead connection or nil data")
+	}
+
+	g.doWrite(p)
+	return len(p), nil
 }
 
 var _ network.Conn = (*GnetConn)(nil)

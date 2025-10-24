@@ -3,6 +3,7 @@ package tcp
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/czx-lab/czx/network"
@@ -36,12 +37,15 @@ type (
 		ImmediateRelease bool
 	}
 	GnetTcpServer struct {
-		conf   *GnetTcpServerConf
-		eng    gnet.Engine
-		agent  func(network.Conn) network.Agent
-		delay  time.Duration
-		tickFn func()
-		parse  *xtcp.MessageParser
+		mu       sync.Mutex
+		conf     *GnetTcpServerConf
+		eng      gnet.Engine
+		agent    func(network.Conn) network.Agent
+		delay    time.Duration
+		tickFn   func()
+		parse    *xtcp.MessageParser
+		connWait sync.WaitGroup
+		conns    Conns
 	}
 )
 
@@ -54,6 +58,7 @@ func NewGNetTcpServer(conf *GnetTcpServerConf, agent func(network.Conn) network.
 		conf:  conf,
 		agent: agent,
 		parse: xtcp.NewParse(&conf.MessageParserConf),
+		conns: make(Conns),
 	}
 }
 
@@ -78,12 +83,23 @@ func (g *GnetTcpServer) Start() {
 
 func (g *GnetTcpServer) Stop() {
 	g.eng.Stop(context.Background())
+
+	g.mu.Lock()
+	for conn := range g.conns {
+		conn.Close()
+	}
+
+	g.conns = make(Conns)
+	g.mu.Unlock()
+
+	g.connWait.Wait()
 }
 
 // OnClose implements gnet.EventHandler.
 func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 	switch agent := c.Context().(type) {
 	case network.Agent:
+		agent.Destroy()
 		agent.OnClose()
 	}
 	c.SetContext(nil)
@@ -98,11 +114,33 @@ func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	}
 	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf).WithParse(es.parse)
 	agent := es.agent(conn)
+	es.mu.Lock()
+	es.conns[conn] = struct{}{}
+	es.mu.Unlock()
 
 	ip, port, _ := network.GetClientIPFromProxyProtocol(c)
 	// Set the IP and port in the agent
 	clientAddr := network.ClientAddrMessage{IP: *ip, Port: *port}
 	agent.OnPreConn(clientAddr)
+
+	es.connWait.Add(1)
+	go func() {
+		agent.Run()
+
+		// Release resources based on the ImmediateRelease configuration
+		if es.conf.ImmediateRelease {
+			conn.Destroy()
+		} else {
+			conn.Close()
+		}
+
+		es.mu.Lock()
+		delete(es.conns, conn)
+		es.mu.Unlock()
+		agent.OnClose()
+
+		es.connWait.Done()
+	}()
 
 	conn.withClientAddr(clientAddr)
 	c.SetContext(agent)

@@ -49,7 +49,7 @@ func NewParse(conf *MessageParserConf) *MessageParser {
 }
 
 // Read message from connection, the first 1/2/4 bytes is the length of the message
-func (m *MessageParser) Read(conn *TcpConn) ([]byte, error) {
+func (m *MessageParser) Read(conn io.Reader) ([]byte, error) {
 	var b [4]byte
 	bufMsgLen := b[:m.conf.MsgLengthType]
 	if _, err := io.ReadFull(conn, bufMsgLen); err != nil {
