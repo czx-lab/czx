@@ -34,11 +34,4 @@ type (
 		// It takes an Agent and a PreHandlerMessage as arguments and returns an error.
 		OnPreConn(ClientAddrMessage)
 	}
-
-	// GnetAgent is an interface for handling incoming data in a gnet connection.
-	// It is used to process messages received from the network.
-	GnetAgent interface {
-		// Process incoming data
-		React([]byte)
-	}
 )

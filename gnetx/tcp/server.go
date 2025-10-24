@@ -82,25 +82,37 @@ func (g *GnetTcpServer) Start() {
 }
 
 func (g *GnetTcpServer) Stop() {
-	g.eng.Stop(context.Background())
-
-	g.mu.Lock()
-	for conn := range g.conns {
-		conn.Close()
+	if g.conf.ImmediateRelease {
+		// Immediately close all connections
+		g.mu.Lock()
+		for conn := range g.conns {
+			conn.Destroy()
+		}
+		g.mu.Unlock()
 	}
 
+	// Stop the engine, which will trigger OnClose for all connections
+	g.eng.Stop(context.Background())
+
+	// Wait for all agent goroutines to finish
+	g.connWait.Wait()
+
+	// Clear the connection map
+	g.mu.Lock()
 	g.conns = make(Conns)
 	g.mu.Unlock()
-
-	g.connWait.Wait()
 }
 
 // OnClose implements gnet.EventHandler.
 func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
-	switch agent := c.Context().(type) {
-	case network.Agent:
-		agent.Destroy()
-		agent.OnClose()
+	// Get the connection from context and close it
+	if conn, ok := c.Context().(*GnetConn); ok && conn != nil {
+		// Close the connection to signal agent.Run() to exit
+		if es.conf.ImmediateRelease {
+			conn.Destroy()
+		} else {
+			conn.Close()
+		}
 	}
 	c.SetContext(nil)
 	return gnet.None
@@ -113,37 +125,34 @@ func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 		return nil, gnet.Close
 	}
 	conn := NewGnetConn(c, &es.conf.GnetTcpConnConf).WithParse(es.parse)
+
+	ip, port, _ := network.GetClientIPFromProxyProtocol(c)
+	clientAddr := network.ClientAddrMessage{IP: *ip, Port: *port}
+	conn.withClientAddr(clientAddr)
+
+	// Store conn in context for fast lookup in OnTraffic
+	c.SetContext(conn)
+
 	agent := es.agent(conn)
 	es.mu.Lock()
 	es.conns[conn] = struct{}{}
 	es.mu.Unlock()
 
-	ip, port, _ := network.GetClientIPFromProxyProtocol(c)
-	// Set the IP and port in the agent
-	clientAddr := network.ClientAddrMessage{IP: *ip, Port: *port}
 	agent.OnPreConn(clientAddr)
 
 	es.connWait.Add(1)
 	go func() {
 		agent.Run()
 
-		// Release resources based on the ImmediateRelease configuration
-		if es.conf.ImmediateRelease {
-			conn.Destroy()
-		} else {
-			conn.Close()
-		}
-
+		// agent.Run() has exited, clean up resources
 		es.mu.Lock()
 		delete(es.conns, conn)
 		es.mu.Unlock()
+
 		agent.OnClose()
 
 		es.connWait.Done()
 	}()
-
-	conn.withClientAddr(clientAddr)
-	c.SetContext(agent)
 
 	return nil, gnet.None
 }
@@ -179,10 +188,15 @@ func (es *GnetTcpServer) OnTraffic(c gnet.Conn) gnet.Action {
 		return gnet.Close
 	}
 
-	switch agent := c.Context().(type) {
-	case network.GnetAgent:
-		agent.React(buf)
-	default:
+	// Fast lookup: get GnetConn directly from context
+	conn, ok := c.Context().(*GnetConn)
+	if !ok || conn == nil {
+		return gnet.Close
+	}
+
+	// Write data to buffer
+	if _, err := conn.WriteBuffer(buf); err != nil {
+		xlog.Write().Error("gnet tcp server write buffer error: %v", zap.Error(err))
 		return gnet.Close
 	}
 

@@ -52,7 +52,6 @@ type (
 )
 
 var _ network.Agent = (*agent)(nil)
-var _ network.GnetAgent = (*agent)(nil)
 
 func NewGate(opt GateConf) *Gate {
 	return &Gate{
@@ -203,22 +202,6 @@ func (a *agent) OnPreConn(data network.ClientAddrMessage) {
 	}
 
 	a.gate.preConn(a, data)
-}
-
-// React implements network.GnetAgent.
-func (a *agent) React(data []byte) {
-	if a.conn == nil {
-		return
-	}
-	write, ok := a.conn.(interface {
-		WriteBuffer(data []byte) (n int, err error)
-	})
-	if !ok {
-		return
-	}
-	if _, err := write.WriteBuffer(data); err != nil {
-		xlog.Write().Error("gnet agent write buffer error", zap.Error(err))
-	}
 }
 
 // Write implements network.Agent.
