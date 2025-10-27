@@ -64,3 +64,8 @@ type (
 		RegisterHandler(msg any, handler Handler) error
 	}
 )
+
+// HandlerArgs extracts the typed message and Agent from the handler arguments.
+func HandlerArgs[T any](args []any) (T, Agent) {
+	return args[0].(T), args[1].(Agent)
+}
