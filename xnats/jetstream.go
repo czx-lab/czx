@@ -59,7 +59,7 @@ func (js *JetStream) AddConsumer(stream, consumer string, cconf *nats.ConsumerCo
 	if err == nil {
 		return nil // Consumer already exists
 	}
-	if errors.Is(err, nats.ErrConsumerNotFound) {
+	if !errors.Is(err, nats.ErrConsumerNotFound) {
 		return err // Some other error occurred
 	}
 
