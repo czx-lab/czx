@@ -39,36 +39,39 @@ func (c *Client) WithAgent(agent func(net.Conn) network.Agent) *Client {
 }
 
 // Connect establishes a Unix domain socket connection to the server and starts the agent.
-func (c *Client) Connect() error {
+func (c *Client) Connect() (network.Agent, error) {
 	if c.flag {
-		return errors.New("client stopped")
+		return nil, errors.New("client stopped")
 	}
+	if c.agent == nil {
+		return nil, errors.New("agent is nil")
+	}
+
+	conn, err := c.dial()
+	if err != nil {
+		return nil, err
+	}
+
+	agent := c.agent(conn)
 
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
 
-		if err := c.connect(); err != nil {
-			xlog.Write().Sugar().Errorf("unix client connect error: %w", err)
+		if err := c.connect(conn, agent); err != nil {
+			xlog.Write().Sugar().Errorf("unix client connect error: %v", err)
 		}
 	}()
 
-	return nil
+	return agent, nil
 }
 
 // connect establishes a Unix domain socket connection to the server and starts the agent.
-func (c *Client) connect() error {
-	conn, err := c.dial()
-	if err != nil {
-		return err
-	}
+func (c *Client) connect(conn net.Conn, agent network.Agent) error {
 	c.mu.Lock()
 	c.conns[conn] = struct{}{}
 	c.mu.Unlock()
-	if c.agent == nil {
-		return errors.New("agent not set")
-	}
-	agent := c.agent(conn)
+
 	agent.Run()
 
 	conn.Close()
@@ -83,7 +86,7 @@ func (c *Client) connect() error {
 func (c *Client) dial() (net.Conn, error) {
 	conn, err := net.Dial("unix", c.conf.Path)
 	if err != nil {
-		xlog.Write().Sugar().Errorf("unix conn error: %w", err)
+		xlog.Write().Sugar().Errorf("unix conn error: %v", err)
 		return nil, err
 	}
 	return conn, nil
