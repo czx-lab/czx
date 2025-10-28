@@ -25,12 +25,13 @@ func (p *producerWorker) OnStart(ctx context.Context) {
 
 // Exec implements Worker.
 func (p *producerWorker) Exec(ctx context.Context) WorkerState {
+	// p.mbox.Receive()
 	select {
 	case <-ctx.Done():
 		return WorkerStopped
 	case <-time.After(200 * time.Millisecond):
 		p.num++
-		_ = p.mbox.Write(p.num, 0)
+		// _ = p.mbox.Write(p.num, 0)
 		return WorkerRunning
 	}
 }

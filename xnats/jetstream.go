@@ -1,6 +1,11 @@
 package xnats
 
-import "github.com/nats-io/nats.go"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/nats-io/nats.go"
+)
 
 type JetStream struct {
 	js nats.JetStreamContext
@@ -38,20 +43,28 @@ func (js *JetStream) AddStream(conf *nats.StreamConfig, opts ...nats.JSOpt) erro
 	return err
 }
 
-func (js *JetStream) AddConsumer(stream, consumer string, opts ...nats.JSOpt) error {
+// AddConsumer creates a new JetStream consumer for the specified stream with the given configuration.
+// If the consumer already exists, it returns nil without error.
+func (js *JetStream) AddConsumer(stream, consumer string, cconf *nats.ConsumerConfig, opts ...nats.JSOpt) error {
+	if cconf == nil {
+		return fmt.Errorf("consumer config is nil")
+	}
+	// If consumer name is empty, create a new consumer with a generated name
+	if consumer == "" {
+		_, err := js.js.AddConsumer(stream, cconf, opts...)
+		return err
+	}
 	// Check if the consumer already exists
 	_, err := js.js.ConsumerInfo(stream, consumer)
 	if err == nil {
 		return nil // Consumer already exists
 	}
-	if err != nats.ErrConsumerNotFound {
+	if errors.Is(err, nats.ErrConsumerNotFound) {
 		return err // Some other error occurred
 	}
 
 	// Add the consumer
-	_, err = js.js.AddConsumer(stream, &nats.ConsumerConfig{
-		Durable: consumer,
-	}, opts...)
+	_, err = js.js.AddConsumer(stream, cconf, opts...)
 
 	return err
 }
