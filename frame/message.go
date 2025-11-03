@@ -18,7 +18,7 @@ type (
 	// and the inputs from all players.
 	Frame struct {
 		FrameID uint64
-		Inputs  map[string]Message
+		Inputs  map[string][]Message
 	}
 )
 

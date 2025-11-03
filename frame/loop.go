@@ -38,7 +38,7 @@ type (
 		normalProc NormalProcessor
 		frameId    uint64 // Current frame ID
 		// Input queue for each player
-		frameQueue map[string]Message
+		frameQueue map[string][]Message
 		playerIds  map[string]uint
 		// Channel for normal processing
 		normalQueue chan Message
@@ -57,7 +57,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 		loop.normalQueue = make(chan Message, conf.MaxQueueSize)
 	}
 	if conf.LoopType == LoopTypeFream {
-		loop.frameQueue = make(map[string]Message)
+		loop.frameQueue = make(map[string][]Message)
 		loop.playerIds = make(map[string]uint)
 	}
 
@@ -178,7 +178,7 @@ func (l *Loop) processF() {
 	// Create a new frame with the current frame ID
 	frame := Frame{
 		FrameID: l.frameId,
-		Inputs:  make(map[string]Message),
+		Inputs:  make(map[string][]Message),
 	}
 
 	// Process inputs for all registered players
@@ -187,20 +187,22 @@ func (l *Loop) processF() {
 			// Player has input for this frame
 			frame.Inputs[playerId] = input
 			// Update the last processed frame ID for the player
-			l.playerIds[playerId] = uint(input.FrameID)
+			l.playerIds[playerId] = uint(input[len(input)-1].FrameID)
 			continue
 		}
 		// If no input from the player, create an empty message
-		emptyMessage := Message{
-			PlayerID:  playerId,
-			FrameID:   int(l.frameId),
-			Timestamp: time.Now(),
+		emptyMessage := []Message{
+			{
+				PlayerID:  playerId,
+				FrameID:   int(l.frameId),
+				Timestamp: time.Now(),
+			},
 		}
 		frame.Inputs[playerId] = emptyMessage
 	}
 
 	// Clear the frame queue for the next frame
-	l.frameQueue = make(map[string]Message)
+	l.frameQueue = make(map[string][]Message)
 
 	// Process the frame
 	l.frameProc.Process(frame)
@@ -251,8 +253,10 @@ func (l *Loop) Write(in Message) error {
 	}
 
 	// Check for stale messages
-	if existing, ok := l.frameQueue[in.PlayerID]; ok && existing.FrameID >= in.FrameID {
-		return errors.New("stale or duplicate message")
+	if existing, ok := l.frameQueue[in.PlayerID]; ok {
+		if existing != nil && existing[len(existing)-1].FrameID > in.FrameID {
+			return errors.New("stale or duplicate message")
+		}
 	}
 
 	// Only accept messages for current or future frames
@@ -260,7 +264,7 @@ func (l *Loop) Write(in Message) error {
 		return errors.New("message for past frame")
 	}
 
-	l.frameQueue[in.PlayerID] = in
+	l.frameQueue[in.PlayerID] = append(l.frameQueue[in.PlayerID], in)
 	return nil
 }
 

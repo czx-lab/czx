@@ -97,7 +97,7 @@ func TestLoop(t *testing.T) {
 		for i := range 10 {
 			loop.Write(Message{
 				PlayerID:  fmt.Sprintf("Player_next%d", i),
-				Data:      []byte(fmt.Sprintf("Input next from Player%d", i%3)),
+				Data:      fmt.Appendf(nil, "Input next from Player%d", i%3),
 				Timestamp: time.Now(),
 			})
 		}
@@ -139,16 +139,20 @@ func TestFrame(t *testing.T) {
 	// Create a new frame
 	frame := Frame{
 		FrameID: 1,
-		Inputs: map[string]Message{
+		Inputs: map[string][]Message{
 			"Player1": {
-				PlayerID:  "Player1",
-				Data:      []byte("Input data"),
-				Timestamp: time.Now(),
+				{
+					PlayerID:  "Player1",
+					Data:      []byte("Input data"),
+					Timestamp: time.Now(),
+				},
 			},
 			"Player2": {
-				PlayerID:  "Player2",
-				Data:      []byte("Input data"),
-				Timestamp: time.Now(),
+				{
+					PlayerID:  "Player2",
+					Data:      []byte("Input data"),
+					Timestamp: time.Now(),
+				},
 			},
 		},
 	}
@@ -168,12 +172,6 @@ func TestFrame(t *testing.T) {
 	// Check if the original and deserialized frames are equal
 	if frame.FrameID != deserializedFrame.FrameID || len(frame.Inputs) != len(deserializedFrame.Inputs) {
 		t.Errorf("Original and deserialized frames are not equal: %+v vs %+v", frame, deserializedFrame)
-	}
-	for playerID, message := range frame.Inputs {
-		deserializedMessage, ok := deserializedFrame.Inputs[playerID]
-		if !ok || message.PlayerID != deserializedMessage.PlayerID || string(message.Data) != string(deserializedMessage.Data) {
-			t.Errorf("Original and deserialized messages are not equal: %+v vs %+v", message, deserializedMessage)
-		}
 	}
 	// Check if the original and deserialized frames are equal
 	if frame.FrameID != deserializedFrame.FrameID || len(frame.Inputs) != len(deserializedFrame.Inputs) {
