@@ -15,20 +15,23 @@ type (
 		Value    any
 		ExpireAt time.Time
 	}
+	MemoOption struct {
+		Interval time.Duration
+		cmap.Option[string]
+	}
 	Memo struct {
-		data     *cmap.CMap[string, *CacheItem]
+		data     *cmap.Shareded[string, *CacheItem]
 		interval time.Duration
 		done     chan struct{}
 	}
 )
 
 // NewMemo creates a new Memo instance.
-func NewMemo(interval time.Duration, r recycler.Recycler) *Memo {
-	cdata := cmap.New[string, *CacheItem]()
+func NewMemo(opt MemoOption, r recycler.Recycler) *Memo {
 	mc := &Memo{
-		data:     cdata.WithRecycler(r),
+		data:     cmap.NewSharded[string, *CacheItem](opt.Option, r),
 		done:     make(chan struct{}),
-		interval: interval,
+		interval: opt.Interval,
 	}
 	// start the cleanup goroutine.
 	go mc.cleanup()
