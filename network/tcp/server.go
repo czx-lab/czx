@@ -1,6 +1,7 @@
 package tcp
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -10,9 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	defaultMaxConn = 1000
-)
+// defaultMaxConn is the default maximum number of connections
+const defaultMaxConn = 1000
 
 type (
 	TcpServerConf struct {
@@ -27,6 +27,8 @@ type (
 		// If false, the server will wait for all active connections to close gracefully before releasing resources.
 		// Default is false.
 		ImmediateRelease bool
+		// Disable Nagle's algorithm if true
+		NoDelay bool
 	}
 	TcpServer struct {
 		sync.Mutex
@@ -78,20 +80,23 @@ func (srv *TcpServer) run() {
 	for {
 		conn, err := srv.ln.Accept()
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				if delay == 0 {
-					delay = 5 * time.Millisecond
-				} else {
-					delay *= 2
-				}
-				if max := 1 * time.Second; delay > max {
-					delay = max
-				}
-
-				time.Sleep(delay)
-				continue
+			if errors.Is(err, net.ErrClosed) {
+				return
 			}
-			return
+			if delay == 0 {
+				delay = 5 * time.Millisecond
+			} else {
+				delay *= 2
+			}
+			if max := 1 * time.Second; delay > max {
+				delay = max
+			}
+
+			time.Sleep(delay)
+			continue
+		}
+		if tcpconn, ok := conn.(*net.TCPConn); ok {
+			tcpconn.SetNoDelay(srv.conf.NoDelay)
 		}
 
 		delay = 0

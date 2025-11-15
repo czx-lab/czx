@@ -1,6 +1,7 @@
 package xkcp
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -14,6 +15,14 @@ const (
 	defaultCryptKey     = "default_czx_key" // Default encryption key
 	defaultDataShards   = 10                // Default number of data shards
 	defaultParityShards = 3                 // Default number of parity shards
+	// defaultMaxConn is the default maximum number of connections
+	defaultMaxConn = 1000
+
+	// KCP default Parameters
+	defaultNoDelay  = 1
+	defaultInterval = 10
+	defaultResend   = 2
+	defaultNC       = 1
 )
 
 type (
@@ -32,6 +41,12 @@ type (
 		// If false, the server will wait for all active connections to close gracefully before releasing resources.
 		// Default is false.
 		ImmediateRelease bool
+
+		// KCP Parameters
+		NoDelay  *int
+		Interval *int
+		Resend   *int
+		NC       *int
 	}
 	KcpServer struct {
 		sync.Mutex
@@ -50,6 +65,7 @@ func NewKcpServer(conf KcpServerConf, agent func(*tcp.TcpConn) network.Agent) *K
 	return &KcpServer{
 		conf:  conf,
 		agent: agent,
+		conns: make(tcp.Conns),
 	}
 }
 
@@ -79,23 +95,27 @@ func (srv *KcpServer) run() {
 	for {
 		conn, err := srv.ln.Accept()
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				if delay == 0 {
-					delay = 5 * time.Millisecond
-				} else {
-					delay *= 2
-				}
-				if max := 1 * time.Second; delay > max {
-					delay = max
-				}
-
-				time.Sleep(delay)
-				continue
+			if errors.Is(err, net.ErrClosed) {
+				return
 			}
-			return
+			if delay == 0 {
+				delay = 5 * time.Millisecond
+			} else {
+				delay *= 2
+			}
+			if max := 1 * time.Second; delay > max {
+				delay = max
+			}
+
+			time.Sleep(delay)
+			continue
 		}
 
 		delay = 0
+
+		if kcpConn, ok := conn.(*kcp.UDPSession); ok {
+			kcpConn.SetNoDelay(*srv.conf.NoDelay, *srv.conf.Interval, *srv.conf.Resend, *srv.conf.NC)
+		}
 
 		srv.Lock()
 
@@ -168,5 +188,24 @@ func defaultConf(conf *KcpServerConf) {
 	}
 	if conf.CryptKey == nil {
 		conf.CryptKey = []byte(defaultCryptKey) // Use a default key if none provided
+	}
+	if conf.MaxConn <= 0 {
+		conf.MaxConn = defaultMaxConn
+	}
+	if conf.NoDelay == nil {
+		v := defaultNoDelay
+		conf.NoDelay = &v
+	}
+	if conf.Interval == nil {
+		v := defaultInterval
+		conf.Interval = &v
+	}
+	if conf.Resend == nil {
+		v := defaultResend
+		conf.Resend = &v
+	}
+	if conf.NC == nil {
+		v := defaultNC
+		conf.NC = &v
 	}
 }
