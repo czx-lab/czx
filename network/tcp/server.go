@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/network/metrics"
+	"github.com/czx-lab/czx/prometheus"
 	"github.com/czx-lab/czx/xlog"
 	"go.uber.org/zap"
 )
@@ -29,6 +31,8 @@ type (
 		ImmediateRelease bool
 		// Disable Nagle's algorithm if true
 		NoDelay bool
+		// Metrics configuration
+		Metrics metrics.SvrMetricsConf
 	}
 	TcpServer struct {
 		sync.Mutex
@@ -39,19 +43,27 @@ type (
 		conns Conns
 		ln    net.Listener
 
-		agent func(*TcpConn) network.Agent
-		parse *MessageParser
+		agent   func(*TcpConn) network.Agent
+		parse   *MessageParser
+		metrics network.ServerMetrics
 	}
 )
 
 func NewServer(conf *TcpServerConf, agent func(*TcpConn) network.Agent) *TcpServer {
 	defaultConf(conf)
+	var m network.ServerMetrics
+	if prometheus.Enabled() {
+		m = metrics.NewSvrMetrics(conf.Metrics)
+	} else {
+		m = &network.NoopServerMetrics{}
+	}
 
 	return &TcpServer{
-		conf:  conf,
-		conns: make(Conns),
-		agent: agent,
-		parse: NewParse(&conf.MessageParserConf),
+		conf:    conf,
+		conns:   make(Conns),
+		agent:   agent,
+		parse:   NewParse(&conf.MessageParserConf),
+		metrics: m,
 	}
 }
 
@@ -107,15 +119,18 @@ func (srv *TcpServer) run() {
 		if len(srv.conns) >= srv.conf.MaxConn {
 			xlog.Write().Warn("too many connections", zap.Int("max", srv.conf.MaxConn))
 			srv.Unlock()
+			srv.metrics.IncFailedConns()
 			conn.Close()
 			continue
 		}
 
 		srv.conns[conn] = struct{}{}
 		srv.Unlock()
+		srv.metrics.IncConns()
+		srv.metrics.IncTotalConns()
 		srv.connWait.Add(1)
 
-		tcpconn := NewTcpConn(conn, &srv.conf.TcpConnConf).WithParse(srv.parse)
+		tcpconn := NewTcpConn(conn, &srv.conf.TcpConnConf).WithParse(srv.parse).WithMetrics(srv.metrics)
 		agent := srv.agent(tcpconn)
 
 		ip, port, _ := network.GetClientIPFromProxyProtocol(conn)
@@ -125,7 +140,13 @@ func (srv *TcpServer) run() {
 
 		agent.OnPreConn(clientAddr)
 
+		start_t := time.Now()
 		go func() {
+			defer func() {
+				srv.metrics.DecConns()
+				srv.metrics.ObserveConnDuration(time.Since(start_t))
+			}()
+
 			agent.Run()
 			// Release resources based on the ImmediateRelease configuration
 			if srv.conf.ImmediateRelease {

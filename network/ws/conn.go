@@ -37,6 +37,7 @@ type (
 		// Flag to indicate if the connection is closed
 		closeFlag  bool
 		clientAddr network.ClientAddrMessage // Client address message
+		metrics    network.ServerMetrics
 	}
 )
 
@@ -64,13 +65,21 @@ func NewConn(conn *websocket.Conn, opt *WsConnConf) *WsConn {
 			}
 
 			if err := wsConn.conn.WriteMessage(websocket.BinaryMessage, v); err != nil {
+				wsConn.metrics.IncWriteErrors()
 				xlog.Write().Error("ws conn write error", zap.Error(err))
 				break
 			}
+			wsConn.metrics.AddSentBytes(len(v))
 		}
 	}()
 
 	return wsConn
+}
+
+// WithMetrics sets the server metrics for the WsConn instance
+func (w *WsConn) WithMetrics(m network.ServerMetrics) *WsConn {
+	w.metrics = m
+	return w
 }
 
 // Close implements Conn.
@@ -142,6 +151,13 @@ func (w *WsConn) withClientAddr(msg network.ClientAddrMessage) {
 // ReadMessage implements Conn.
 func (w *WsConn) ReadMessage() ([]byte, error) {
 	_, b, err := w.conn.ReadMessage()
+	if err != nil {
+		if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			w.metrics.IncReadErrors()
+		}
+	} else if len(b) > 0 {
+		w.metrics.AddReceivedBytes(len(b))
+	}
 	return b, err
 }
 

@@ -35,6 +35,7 @@ type (
 		done       bool
 		parse      *MessageParser
 		clientAddr network.ClientAddrMessage
+		metrics    network.ServerMetrics
 	}
 )
 
@@ -59,6 +60,14 @@ func NewTcpConn(conn net.Conn, conf *TcpConnConf) *TcpConn {
 	return tcpconn
 }
 
+// WithMetrics sets the server metrics for the TcpConn instance
+// This allows the user to specify metrics tracking for the connection
+// It returns the TcpConn instance for method chaining
+func (c *TcpConn) WithMetrics(m network.ServerMetrics) *TcpConn {
+	c.metrics = m
+	return c
+}
+
 // WithParse sets the message parser for the TcpConn instance
 // This allows the user to specify how messages should be parsed from the connection
 // It returns the TcpConn instance for method chaining
@@ -75,10 +84,13 @@ func (c *TcpConn) init() {
 				break
 			}
 
-			if _, err := c.conn.Write(b); err != nil {
+			n, err := c.conn.Write(b)
+			if err != nil {
 				xlog.Write().Error("tcp conn write error", zap.Error(err))
+				c.metrics.IncWriteErrors()
 				break
 			}
+			c.metrics.AddSentBytes(n)
 		}
 
 		c.conn.Close()
@@ -135,7 +147,15 @@ func (c *TcpConn) LocalAddr() net.Addr {
 
 // Read implements network.Conn.
 func (c *TcpConn) Read(b []byte) (int, error) {
-	return c.conn.Read(b)
+	n, err := c.conn.Read(b)
+	if err != nil && err != io.EOF {
+		c.metrics.IncReadErrors()
+		return n, err
+	}
+	if n > 0 {
+		c.metrics.AddReceivedBytes(n)
+	}
+	return n, err
 }
 
 // ReadMessage implements network.Conn.

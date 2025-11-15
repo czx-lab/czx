@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/network/metrics"
+	"github.com/czx-lab/czx/prometheus"
 	"github.com/czx-lab/czx/xlog"
 	"go.uber.org/zap"
 
@@ -28,6 +30,8 @@ type WsServerConf struct {
 	// If false, the server will wait for all active connections to close gracefully before releasing resources.
 	// Default is false.
 	ImmediateRelease bool
+	// Metrics configuration
+	Metrics metrics.SvrMetricsConf
 }
 
 type WsHandler struct {
@@ -37,6 +41,7 @@ type WsHandler struct {
 	upgrader websocket.Upgrader
 	conns    WsConns
 	agent    func(*WsConn) network.Agent
+	metrics  network.ServerMetrics
 }
 
 type WsServer struct {
@@ -46,12 +51,19 @@ type WsServer struct {
 }
 
 func NewServer(opt *WsServerConf, agent func(*WsConn) network.Agent) *WsServer {
+	var m network.ServerMetrics
+	if prometheus.Enabled() {
+		m = metrics.NewSvrMetrics(opt.Metrics)
+	} else {
+		m = &network.NoopServerMetrics{}
+	}
 	return &WsServer{
 		opt: opt,
 		handler: &WsHandler{
-			opt:   opt,
-			agent: agent,
-			conns: make(WsConns),
+			opt:     opt,
+			agent:   agent,
+			conns:   make(WsConns),
+			metrics: m,
 		},
 	}
 }
@@ -67,14 +79,20 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
+	start_t := time.Now()
 	conn, err := handler.upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		handler.metrics.IncFailedConns()
 		http.Error(w, fmt.Sprintf("Failed to upgrade connection: %s", err.Error()), http.StatusInternalServerError)
 		return
 	}
 
 	handler.wg.Add(1)
-	defer handler.wg.Done()
+	defer func() {
+		handler.metrics.DecConns()
+		handler.metrics.ObserveConnDuration(time.Since(start_t))
+		handler.wg.Done()
+	}()
 
 	handler.mu.Lock()
 
@@ -83,6 +101,7 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if len(handler.conns) >= handler.opt.MaxConn {
 		xlog.Write().Warn("too many connections", zap.Int("max", handler.opt.MaxConn))
 		handler.mu.Unlock()
+		handler.metrics.IncFailedConns()
 		conn.Close()
 		return
 	}
@@ -90,11 +109,13 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.conns[conn] = struct{}{}
 
 	handler.mu.Unlock()
+	handler.metrics.IncConns()
+	handler.metrics.IncTotalConns()
 
 	wsconn := NewConn(conn, &WsConnConf{
 		MaxMsgSize:      handler.opt.MaxMsgSize,
 		PendingWriteNum: handler.opt.PendingWriteNum,
-	})
+	}).WithMetrics(handler.metrics)
 
 	agent := handler.agent(wsconn)
 	ip, port := network.GetClientIP(r)
