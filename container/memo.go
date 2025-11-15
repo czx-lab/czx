@@ -46,15 +46,21 @@ func (mc *Memo) cleanup() {
 	for {
 		select {
 		case <-ticker.C:
+			var keys []string
 			mc.data.Iterator(func(key string, item *CacheItem) bool {
 				if item.ExpireAt.IsZero() {
 					return true // No expiration set, keep the item
 				}
 				if item.ExpireAt.Before(time.Now()) {
-					mc.data.Delete(key)
+					// Iterative internal deletion may result in deadlock.
+					keys = append(keys, key)
 				}
 				return true
 			})
+			// Delete expired items
+			for _, key := range keys {
+				mc.data.Delete(key)
+			}
 		case <-mc.done:
 			return
 		}
