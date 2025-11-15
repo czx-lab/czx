@@ -35,6 +35,7 @@ type (
 		parse      *xtcp.MessageParser
 		gbuffer    *GBuffer
 		clientAddr network.ClientAddrMessage
+		metrics    network.ServerMetrics
 	}
 )
 
@@ -54,6 +55,14 @@ func NewGnetConn(c gnet.Conn, conf *GnetTcpConnConf) *GnetConn {
 	return gnetconn
 }
 
+// WithMetrics sets the server metrics for the GnetConn instance
+// This allows the user to specify metrics tracking for the connection
+// It returns the GnetConn instance for method chaining
+func (g *GnetConn) WithMetrics(m network.ServerMetrics) *GnetConn {
+	g.metrics = m
+	return g
+}
+
 // WithConn sets the underlying gnet connection for the GnetConn instance
 // This allows the user to specify a custom gnet connection if needed
 func (g *GnetConn) init() {
@@ -63,9 +72,12 @@ func (g *GnetConn) init() {
 				break
 			}
 
-			if _, err := g.gnetconn.Write(b); err != nil {
+			n, err := g.gnetconn.Write(b)
+			if err != nil {
+				g.metrics.IncWriteErrors()
 				break
 			}
+			g.metrics.AddSentBytes(n)
 		}
 
 		g.gnetconn.Close()
@@ -85,6 +97,7 @@ func (g *GnetConn) WithParse(parse *xtcp.MessageParser) *GnetConn {
 
 // WriteBuffer writes data to the GBuffer.
 func (g *GnetConn) WriteBuffer(data []byte) (n int, err error) {
+	g.metrics.AddReceivedBytes(len(data))
 	return g.gbuffer.Write(data)
 }
 

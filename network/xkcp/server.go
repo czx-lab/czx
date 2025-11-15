@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/network/metrics"
 	"github.com/czx-lab/czx/network/tcp"
+	"github.com/czx-lab/czx/prometheus"
 	"github.com/xtaci/kcp-go/v5"
 )
 
@@ -41,6 +43,7 @@ type (
 		// If false, the server will wait for all active connections to close gracefully before releasing resources.
 		// Default is false.
 		ImmediateRelease bool
+		Metrics          metrics.SvrMetricsConf
 
 		// KCP Parameters
 		NoDelay  *int
@@ -56,16 +59,23 @@ type (
 		connWait sync.WaitGroup
 		conns    tcp.Conns // Map of connections
 		agent    func(*tcp.TcpConn) network.Agent
+		metrics  network.ServerMetrics
 	}
 )
 
 func NewKcpServer(conf KcpServerConf, agent func(*tcp.TcpConn) network.Agent) *KcpServer {
 	defaultConf(&conf)
-
+	var m network.ServerMetrics
+	if prometheus.Enabled() {
+		m = metrics.NewSvrMetrics(conf.Metrics)
+	} else {
+		m = &network.NoopServerMetrics{}
+	}
 	return &KcpServer{
-		conf:  conf,
-		agent: agent,
-		conns: make(tcp.Conns),
+		conf:    conf,
+		agent:   agent,
+		conns:   make(tcp.Conns),
+		metrics: m,
 	}
 }
 
@@ -122,6 +132,7 @@ func (srv *KcpServer) run() {
 		// Check if the maximum number of connections has been reached
 		if len(srv.conns) >= srv.conf.MaxConn {
 			srv.Unlock()
+			srv.metrics.IncFailedConns()
 			conn.Close()
 			continue
 		}
@@ -129,9 +140,11 @@ func (srv *KcpServer) run() {
 		// Add the new connection to the map
 		srv.conns[conn] = struct{}{}
 		srv.Unlock()
+		srv.metrics.IncConns()
+		srv.metrics.IncTotalConns()
 		srv.connWait.Add(1)
 
-		kcpconn := tcp.NewTcpConn(conn, &srv.conf.TcpConnConf)
+		kcpconn := tcp.NewTcpConn(conn, &srv.conf.TcpConnConf).WithMetrics(srv.metrics)
 		agent := srv.agent(kcpconn)
 
 		ip, port, _ := network.GetClientIPFromProxyProtocol(conn)
@@ -141,7 +154,12 @@ func (srv *KcpServer) run() {
 
 		agent.OnPreConn(clientAddr)
 
+		start_t := time.Now()
 		go func() {
+			defer func() {
+				srv.metrics.DecConns()
+				srv.metrics.ObserveConnDuration(time.Since(start_t))
+			}()
 			agent.Run()
 			// Release resources based on the ImmediateRelease configuration
 			if srv.conf.ImmediateRelease {

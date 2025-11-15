@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/czx-lab/czx/network"
+	"github.com/czx-lab/czx/network/metrics"
 	xtcp "github.com/czx-lab/czx/network/tcp"
+	"github.com/czx-lab/czx/prometheus"
 	"github.com/czx-lab/czx/xlog"
 
 	"github.com/panjf2000/gnet/v2"
@@ -35,6 +37,7 @@ type (
 		// If false, the server will wait for all active connections to close gracefully before releasing resources.
 		// Default is false.
 		ImmediateRelease bool
+		Metrics          metrics.SvrMetricsConf
 	}
 	GnetTcpServer struct {
 		mu       sync.Mutex
@@ -46,6 +49,7 @@ type (
 		parse    *xtcp.MessageParser
 		connWait sync.WaitGroup
 		conns    Conns
+		metrics  network.ServerMetrics
 	}
 )
 
@@ -53,12 +57,19 @@ var _ gnet.EventHandler = (*GnetTcpServer)(nil)
 
 func NewGNetTcpServer(conf *GnetTcpServerConf, agent func(network.Conn) network.Agent) *GnetTcpServer {
 	defaultConf(conf)
+	var m network.ServerMetrics
+	if prometheus.Enabled() {
+		m = metrics.NewSvrMetrics(conf.Metrics)
+	} else {
+		m = &network.NoopServerMetrics{}
+	}
 
 	return &GnetTcpServer{
-		conf:  conf,
-		agent: agent,
-		parse: xtcp.NewParse(&conf.MessageParserConf),
-		conns: make(Conns),
+		conf:    conf,
+		agent:   agent,
+		parse:   xtcp.NewParse(&conf.MessageParserConf),
+		conns:   make(Conns),
+		metrics: m,
 	}
 }
 
@@ -121,6 +132,7 @@ func (es *GnetTcpServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 // OnOpen implements gnet.EventHandler.
 func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	if es.eng.CountConnections() > es.conf.MaxConn {
+		es.metrics.IncFailedConns()
 		xlog.Write().Warn("too many connections", zap.Int("max", es.conf.MaxConn))
 		return nil, gnet.Close
 	}
@@ -138,10 +150,19 @@ func (es *GnetTcpServer) OnOpen(c gnet.Conn) (out []byte, action gnet.Action) {
 	es.conns[conn] = struct{}{}
 	es.mu.Unlock()
 
+	es.metrics.IncConns()
+	es.metrics.IncTotalConns()
+
 	agent.OnPreConn(clientAddr)
 
 	es.connWait.Add(1)
+	start_t := time.Now()
 	go func() {
+		defer func() {
+			es.metrics.DecConns()
+			es.metrics.ObserveConnDuration(time.Since(start_t))
+		}()
+
 		agent.Run()
 
 		// agent.Run() has exited, clean up resources
