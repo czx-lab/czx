@@ -142,15 +142,13 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("flatbuffers: message ID %d not registered", id)
 	}
-	msg := reflect.New(info.type_.Elem()).Interface()
-	method := reflect.ValueOf(msg).MethodByName("Init")
-	if !method.IsValid() {
-		return nil, fmt.Errorf("flatbuffers: message %s does not have Init method", info.type_)
+	msg, ok := info.type_.(interface{ Init([]byte, fb.UOffsetT) })
+	if !ok {
+		return nil, fmt.Errorf("flatbuffers: message %s does not implement Init method", info.type_)
 	}
-
 	buf := data[2:]
 	pos := fb.GetUOffsetT(buf)
-	_ = method.Call([]reflect.Value{reflect.ValueOf(buf), reflect.ValueOf(pos)})
+	msg.Init(buf, pos)
 	return msg, nil
 }
 

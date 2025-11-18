@@ -31,6 +31,11 @@ type (
 
 var _ network.ServerMetrics = (*SvrMetrics)(nil)
 
+// NewSvrMetrics creates and initializes a new SvrMetrics instance based on the provided configuration.
+// It sets up various gauges, counters, and histograms to monitor server performance.
+// The metrics include active connections, total connections, bytes received/sent, connection duration, and error counts.
+// These metrics can be used for monitoring and analyzing server behavior over time.
+// Returns a pointer to the initialized SvrMetrics instance.
 func NewSvrMetrics(conf SvrMetricsConf) *SvrMetrics {
 	return &SvrMetrics{
 		activeConns: metrics.NewGauge(&metrics.VectorOption{
