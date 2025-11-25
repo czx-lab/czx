@@ -10,12 +10,19 @@ type Player struct {
 	data           any
 	agent          network.Agent
 	heartbeatLogic func(network.Agent)
+	heartbeat      *Heartbeat
 }
 
 func NewPlayer(agent network.Agent) *Player {
 	return &Player{
 		agent: agent,
 	}
+}
+
+// WithHeartbeat sets the heartbeat manager for the player.
+func (p *Player) WithHeartbeat(heartbeat *Heartbeat) *Player {
+	p.heartbeat = heartbeat
+	return p
 }
 
 func (p *Player) ID() string {
@@ -70,6 +77,10 @@ func (p *Player) Heartbeat() {
 // This is typically called when the player is no longer needed or when the game session ends.
 func (p *Player) StopHeartbeat() {
 	// Unregister from heartbeat manager
+	if p.heartbeat != nil {
+		p.heartbeat.Unregister(p)
+		return
+	}
 	GlobalHeartbeat.Unregister(p)
 }
 
@@ -80,14 +91,14 @@ func (p *Player) Close() {
 	}
 
 	// Unregister from heartbeat manager
-	GlobalHeartbeat.Unregister(p)
+	p.StopHeartbeat()
 }
 
 // Destroy cleans up the player resources and unregisters from the heartbeat manager
 // This is typically called when the player is no longer needed or when the game session ends.
 func (p *Player) Destroy() {
 	// Unregister from heartbeat manager
-	GlobalHeartbeat.Unregister(p)
+	p.StopHeartbeat()
 
 	if p.agent != nil {
 		p.agent.Destroy()

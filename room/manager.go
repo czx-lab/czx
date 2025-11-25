@@ -3,6 +3,7 @@ package room
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/czx-lab/czx/container/cmap"
 	"github.com/czx-lab/czx/container/recycler"
@@ -17,16 +18,16 @@ var (
 )
 
 type RoomManager struct {
-	wg    sync.WaitGroup
-	mu    sync.RWMutex
-	rooms *cmap.CMap[string, *Room]
+	wg     sync.WaitGroup
+	mu     sync.RWMutex
+	rooms  *cmap.Shareded[string, *Room]
+	closed atomic.Bool
 }
 
 // NewRoomManager creates a new RoomManager instance.
-func NewRoomManager(r recycler.Recycler) *RoomManager {
-	roms := cmap.New[string, *Room]()
+func NewRoomManager(opt cmap.Option[string], r recycler.Recycler) *RoomManager {
 	return &RoomManager{
-		rooms: roms.WithRecycler(r),
+		rooms: cmap.NewSharded[string, *Room](opt, r),
 	}
 }
 
@@ -103,6 +104,10 @@ func (rm *RoomManager) Num() int {
 // Stop stops all rooms managed by the RoomManager.
 // It waits for all rooms to finish processing before returning.
 func (rm *RoomManager) Stop() {
+	if rm.closed.Swap(true) {
+		return
+	}
+
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
@@ -116,6 +121,11 @@ func (rm *RoomManager) Stop() {
 	rm.rooms.Clear()
 
 	rm.wg.Wait()
+}
+
+// IsClosed checks if the RoomManager has been closed.
+func (rm *RoomManager) IsClosed() bool {
+	return rm.closed.Load()
 }
 
 // Iterate over all rooms and apply the function.

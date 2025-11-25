@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/czx-lab/czx/container/cmap"
 	"github.com/czx-lab/czx/frame"
 )
 
@@ -94,7 +95,7 @@ func TestRoom(t *testing.T) {
 
 func TestRoomManager(t *testing.T) {
 	t.Run("room manager test", func(t *testing.T) {
-		rm := NewRoomManager(nil)
+		rm := NewRoomManager(cmap.Option[string]{}, nil)
 		room := NewRoom(RoomConf{
 			RoomID: "2",
 		}, nil)

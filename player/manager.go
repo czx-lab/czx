@@ -2,8 +2,10 @@ package player
 
 import (
 	"errors"
+	"hash/fnv"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/czx-lab/czx/container/cmap"
@@ -19,11 +21,14 @@ type (
 	ManagerConf struct {
 		// Heartbeat interval in seconds
 		HeartbeatInterval int
+		cmap.Option[string]
 	}
 	PlayerManager struct {
 		sync.RWMutex
-		conf    *ManagerConf
-		players *cmap.CMap[string, *Player]
+		conf      *ManagerConf
+		players   *cmap.Shareded[string, *Player]
+		closed    atomic.Bool
+		heartbeat *Heartbeat
 	}
 	// BroadcastMessage is a struct that represents a message to be broadcasted to players.
 	BroadcastMessage struct {
@@ -33,11 +38,26 @@ type (
 )
 
 func NewPlayerManager(conf *ManagerConf, r recycler.Recycler) *PlayerManager {
-	ps := cmap.New[string, *Player]()
 	return &PlayerManager{
 		conf:    conf,
-		players: ps.WithRecycler(r),
+		players: cmap.NewSharded[string, *Player](conf.Option, r),
+		heartbeat: NewHeartbeat(HeartbeatConf{
+			Option: cmap.Option[*Player]{
+				Count: conf.Count,
+				Hash: func(p *Player) int {
+					h := fnv.New32a()
+					h.Write([]byte(p.ID()))
+					return int(h.Sum32())
+				},
+			},
+		}, r),
 	}
+}
+
+// WithHeartbeat sets the heartbeat manager for the player manager.
+func (p *PlayerManager) WithHeartbeat(hb *Heartbeat) *PlayerManager {
+	p.heartbeat = hb
+	return p
 }
 
 // Add adds a new player to the player manager. If the player already exists, it returns an error.
@@ -52,8 +72,25 @@ func (p *PlayerManager) Add(player *Player) error {
 	p.players.Set(player.ID(), player)
 
 	// Register the player with the heartbeat manager
-	GlobalHeartbeat.Register(player)
+	if p.heartbeat != nil {
+		if player.heartbeat == nil {
+			player.WithHeartbeat(p.heartbeat)
+		}
+
+		p.heartbeat.Register(player)
+	} else {
+		GlobalHeartbeat.Register(player)
+	}
+
 	return nil
+}
+
+// Has checks if a player with the given ID exists in the player manager.
+func (p *PlayerManager) Has(id string) bool {
+	p.RLock()
+	defer p.RUnlock()
+
+	return p.players.Has(id)
 }
 
 // Player retrieves the agent from the player. If the agent is not found, it returns an error.
@@ -72,8 +109,17 @@ func (p *PlayerManager) Player(id string) (*Player, error) {
 // Start starts the heartbeat process for all registered players at the specified interval.
 // It sends a heartbeat signal to each player at the specified interval.
 func (p *PlayerManager) Start() {
+	if p.closed.Load() {
+		return
+	}
+
 	if p.conf.HeartbeatInterval == 0 {
 		p.conf.HeartbeatInterval = DefaultHeartbeatInterval
+	}
+
+	if p.heartbeat != nil {
+		p.heartbeat.Start(time.Duration(p.conf.HeartbeatInterval) * time.Second)
+		return
 	}
 
 	GlobalHeartbeat.Start(time.Duration(p.conf.HeartbeatInterval) * time.Second)
@@ -110,6 +156,8 @@ func (p *PlayerManager) Delete(id string) error {
 		return ErrPlayerNotFound
 	}
 
+	player, _ := p.players.Get(id)
+	player.StopHeartbeat()
 	p.players.Delete(id)
 	return nil
 }
@@ -210,8 +258,17 @@ func (p *PlayerManager) BroadcastByFunc(msg BroadcastMessage, fn func(*Player) b
 	})
 }
 
+// IsClosed checks if the player manager is closed.
+func (p *PlayerManager) IsClosed() bool {
+	return p.closed.Load()
+}
+
 // Close closes all player connections and cleans up resources.
 func (p *PlayerManager) Close() {
+	if p.closed.Swap(true) {
+		return
+	}
+
 	p.RLock()
 	defer p.RUnlock()
 

@@ -8,6 +8,8 @@ import (
 	"github.com/czx-lab/czx/container/recycler"
 )
 
+const defaultShardCount = 32
+
 type (
 	Option[K comparable] struct {
 		Count int         // Number of shards
@@ -22,6 +24,9 @@ type (
 )
 
 func NewSharded[K comparable, V any](opt Option[K], r recycler.Recycler) *Shareded[K, V] {
+	if opt.Count <= 0 {
+		opt.Count = defaultShardCount
+	}
 	shards := make([]*CMap[K, V], opt.Count)
 	for i := 0; i < opt.Count; i++ {
 		shards[i] = New[K, V]().WithRecycler(r)
