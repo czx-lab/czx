@@ -7,6 +7,19 @@ import (
 	"time"
 )
 
+// waitFor waits for a condition to become true within a timeout
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool, errorMsg string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Error(errorMsg)
+}
+
 func TestSubscribe(t *testing.T) {
 	eb := NewEventBus(10, EvtDefaultType)
 
@@ -21,11 +34,9 @@ func TestSubscribe(t *testing.T) {
 	eb.Publish("test-subscribe", "msg3")
 
 	// Wait for messages to be processed
-	time.Sleep(50 * time.Millisecond)
-
-	if received.Load() != 3 {
-		t.Errorf("Expected 3 messages, got %d", received.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received.Load() == 3
+	}, "Expected 3 messages")
 
 	// Cancel subscription
 	cancel()
@@ -82,11 +93,9 @@ func TestQueueSubscribe(t *testing.T) {
 	eb.PublishWithQueue("test-queue", "msg3")
 
 	// Wait for messages to be processed
-	time.Sleep(100 * time.Millisecond)
-
-	if received.Load() != 3 {
-		t.Errorf("Expected 3 messages, got %d", received.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received.Load() == 3
+	}, "Expected 3 messages")
 
 	// Cancel subscription
 	done := make(chan struct{})
@@ -116,8 +125,13 @@ func TestSubscribeOnce(t *testing.T) {
 	eb.Publish("test-once", "msg2")
 	eb.Publish("test-once", "msg3")
 
-	// Wait for message processing
-	time.Sleep(100 * time.Millisecond)
+	// Wait for message processing - should only receive ONE message
+	waitFor(t, time.Second, func() bool {
+		return received.Load() >= 1
+	}, "Expected at least 1 message")
+
+	// Give some time to ensure no additional messages are processed
+	time.Sleep(50 * time.Millisecond)
 
 	// Should only receive ONE message (SubscribeOnce semantics)
 	if received.Load() != 1 {
@@ -175,12 +189,10 @@ func TestSubscribeWithFilter(t *testing.T) {
 	eb.Publish("test-filter", 5)
 	eb.Publish("test-filter", 6)
 
-	time.Sleep(100 * time.Millisecond)
-
 	// Only 10, 20, and 6 should pass the filter (> 5)
-	if received.Load() != 3 {
-		t.Errorf("Expected 3 filtered messages, got %d", received.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received.Load() == 3
+	}, "Expected 3 filtered messages")
 
 	cancel()
 }
@@ -199,13 +211,30 @@ func TestPublishNoGoroutineLeak(t *testing.T) {
 		eb.Publish("test-publish", i)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
-	if received.Load() != 100 {
-		t.Errorf("Expected 100 messages, got %d", received.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received.Load() == 100
+	}, "Expected 100 messages")
 
 	cancel()
+}
+
+func TestUnsubscribeNewMethod(t *testing.T) {
+	eb := NewEventBus(10, EvtDefaultType)
+
+	_ = eb.SubscribeOnChannel("test-unsub-new")
+	_ = eb.SubscribeOnChannel("test-unsub-new")
+
+	// Use new correctly spelled method
+	eb.Unsubscribe("test-unsub-new")
+
+	// Verify cleanup
+	eb.mu.RLock()
+	subs := len(eb.chanHandlers["test-unsub-new"])
+	eb.mu.RUnlock()
+
+	if subs != 0 {
+		t.Errorf("Expected 0 subscribers after Unsubscribe, got %d", subs)
+	}
 }
 
 func TestUnsubscribeDeprecatedAlias(t *testing.T) {
@@ -214,7 +243,7 @@ func TestUnsubscribeDeprecatedAlias(t *testing.T) {
 	_ = eb.SubscribeOnChannel("test-deprecated")
 	_ = eb.SubscribeOnChannel("test-deprecated")
 
-	// Use deprecated method
+	// Use deprecated method to verify backward compatibility
 	eb.Unsubscriben("test-deprecated")
 
 	// Verify cleanup
@@ -227,12 +256,30 @@ func TestUnsubscribeDeprecatedAlias(t *testing.T) {
 	}
 }
 
+func TestUnsubscribeChannelNewMethod(t *testing.T) {
+	eb := NewEventBus(10, EvtDefaultType)
+
+	ch := eb.SubscribeOnChannel("test-unsub-channel-new")
+
+	// Use new correctly spelled method
+	eb.UnsubscribeChannel("test-unsub-channel-new", ch)
+
+	// Verify cleanup
+	eb.mu.RLock()
+	subs := len(eb.chanHandlers["test-unsub-channel-new"])
+	eb.mu.RUnlock()
+
+	if subs != 0 {
+		t.Errorf("Expected 0 subscribers after UnsubscribeChannel, got %d", subs)
+	}
+}
+
 func TestUnsubscribeChannelDeprecatedAlias(t *testing.T) {
 	eb := NewEventBus(10, EvtDefaultType)
 
 	ch := eb.SubscribeOnChannel("test-deprecated-channel")
 
-	// Use deprecated method
+	// Use deprecated method to verify backward compatibility
 	eb.UnsubscribenChannel("test-deprecated-channel", ch)
 
 	// Verify cleanup
@@ -269,12 +316,11 @@ func TestConcurrentPublish(t *testing.T) {
 	}
 
 	wg.Wait()
-	time.Sleep(200 * time.Millisecond)
 
 	expected := int32(numGoroutines * messagesPerGoroutine)
-	if received.Load() != expected {
-		t.Errorf("Expected %d messages, got %d", expected, received.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received.Load() == expected
+	}, "Expected all concurrent messages to be received")
 
 	cancel()
 }
@@ -294,14 +340,9 @@ func TestMultipleSubscribersReceiveAllMessages(t *testing.T) {
 	eb.Publish("test-multi", "msg1")
 	eb.Publish("test-multi", "msg2")
 
-	time.Sleep(100 * time.Millisecond)
-
-	if received1.Load() != 2 {
-		t.Errorf("Subscriber 1 expected 2 messages, got %d", received1.Load())
-	}
-	if received2.Load() != 2 {
-		t.Errorf("Subscriber 2 expected 2 messages, got %d", received2.Load())
-	}
+	waitFor(t, time.Second, func() bool {
+		return received1.Load() == 2 && received2.Load() == 2
+	}, "Expected both subscribers to receive 2 messages each")
 
 	cancel1()
 	cancel2()
@@ -328,5 +369,31 @@ func TestUnsubscribe(t *testing.T) {
 	}
 	if queueSubs != 0 {
 		t.Errorf("Expected 0 queue subscribers, got %d", queueSubs)
+	}
+}
+
+func TestSubscribeWithNilCallback(t *testing.T) {
+	eb := NewEventBus(10, EvtDefaultType)
+
+	// Subscribe with nil callback should not panic
+	cancel := eb.Subscribe("test-nil-callback", nil)
+
+	// Publish should not panic
+	eb.Publish("test-nil-callback", "msg1")
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel should complete without issues
+	done := make(chan struct{})
+	go func() {
+		cancel()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success - no panic
+	case <-time.After(2 * time.Second):
+		t.Error("Cancel function blocked for too long")
 	}
 }
