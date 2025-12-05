@@ -319,9 +319,9 @@ func (eb *EventBus) PublishWithQueue(event string, data any) {
 // Non-blocking send: if a channel is full, the message is skipped with a warning.
 func (eb *EventBus) Publish(event string, data any) {
 	eb.mu.RLock()
-	subscribers := eb.chanHandlers[event]
-	eb.mu.RUnlock()
+	defer eb.mu.RUnlock()
 
+	subscribers := eb.chanHandlers[event]
 	if len(subscribers) == 0 {
 		return
 	}
