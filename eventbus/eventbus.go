@@ -84,54 +84,60 @@ func (eb *EventBus) SubscribeOnChannel(event string) <-chan any {
 	return ch
 }
 
-// Subscribe creates a new channel for the given event and returns it.
-// The channel is buffered with a size of 1. It will not unsubscribe itself.
-func (eb *EventBus) Subscribe(event string, callback func(message any)) {
-	eb.mu.Lock()
-	defer eb.mu.Unlock()
-
+// Subscribe creates a new channel for the given event and returns a cancel function.
+// The channel is buffered with a capacity defined by the EventBus.
+// Call the returned cancel function to unsubscribe and prevent goroutine leaks.
+func (eb *EventBus) Subscribe(event string, callback func(message any)) (cancel func()) {
 	ch := make(chan any, eb.capacity)
+	eb.mu.Lock()
 	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
+	eb.mu.Unlock()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		for msg := range ch {
-			if callback == nil {
-				continue
+			if callback != nil {
+				callback(msg)
 			}
-			callback(msg) // Call the callback function with the received message
 		}
 	}()
+
+	return func() {
+		eb.UnsubscribeChannel(event, ch)
+		<-done // Wait for the goroutine to exit
+	}
 }
 
 // QueueSubscribe creates a new queue for the given event and starts a goroutine to process messages.
 // It allows for processing messages in a queue-like manner, where messages are processed in the order they are received.
-func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) {
+// Returns a cancel function that can be called to unsubscribe and stop the goroutine.
+func (eb *EventBus) QueueSubscribe(event string, callback func(message any)) (cancel func()) {
 	eb.mu.Lock()
 	queue := cqueue.NewQueue[any](int(eb.capacity)).WithRecycler(eb.recycler)
 	eb.queueHandlers[event] = append(eb.queueHandlers[event], queue)
 	eb.mu.Unlock()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		for {
-			// Check if the event has been unsubscribed
-			eb.mu.RLock()
-			if len(eb.queueHandlers[event]) == 0 {
-				eb.mu.RUnlock()
-				break
-			}
-			eb.mu.RUnlock()
-
-			// Try to dequeue a message
+			// Try to dequeue a message (blocks until message available or queue closed)
 			msg, ok := queue.WaitPop()
 			if !ok {
-				break // Exit if the queue is closed or unsubscribed
+				break // Exit if the queue is closed
 			}
 
 			if callback != nil {
-				callback(msg) // Call the callback function with the received message
+				callback(msg)
 			}
 		}
 	}()
+
+	return func() {
+		eb.UnsubscribeQueue(event, queue)
+		<-done // Wait for the goroutine to exit
+	}
 }
 
 // SubscribeOnQueue creates a new queue for the given event and returns it.
@@ -145,16 +151,16 @@ func (eb *EventBus) SubscribeOnQueue(event string) *cqueue.Queue[any] {
 	return queue
 }
 
-// Unsubscriben removes the given event from the handler mapping.
+// Unsubscribe removes the given event from the handler mapping.
 // This function will clear all channels and queues associated with the event.
 // It is used to clean up resources when an event is no longer needed.
-func (eb *EventBus) Unsubscriben(event string) {
+func (eb *EventBus) Unsubscribe(event string) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
 	subscribers, ok := eb.chanHandlers[event]
 	if !ok {
-		goto UnsubscribenQueue
+		goto UnsubscribeQueue
 	}
 
 	for _, subscriber := range subscribers {
@@ -164,7 +170,7 @@ func (eb *EventBus) Unsubscriben(event string) {
 	delete(eb.chanHandlers, event)
 
 	// unsubscribe from queues if they exist
-UnsubscribenQueue:
+UnsubscribeQueue:
 	if len(eb.queueHandlers[event]) == 0 {
 		return
 	}
@@ -178,9 +184,15 @@ UnsubscribenQueue:
 	delete(eb.queueHandlers, event)
 }
 
-// UnsubscribenChannel removes the specified channel for the given event from the handlers map.
+// Unsubscriben is deprecated, use Unsubscribe instead.
+// Deprecated: This function has a spelling error, use Unsubscribe instead.
+func (eb *EventBus) Unsubscriben(event string) {
+	eb.Unsubscribe(event)
+}
+
+// UnsubscribeChannel removes the specified channel for the given event from the handlers map.
 // It also closes the channel to signal that it's no longer needed.
-func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
+func (eb *EventBus) UnsubscribeChannel(event string, ch <-chan any) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
@@ -200,6 +212,12 @@ func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
 	if len(eb.chanHandlers[event]) == 0 {
 		delete(eb.chanHandlers, event)
 	}
+}
+
+// UnsubscribenChannel is deprecated, use UnsubscribeChannel instead.
+// Deprecated: This function has a spelling error, use UnsubscribeChannel instead.
+func (eb *EventBus) UnsubscribenChannel(event string, ch <-chan any) {
+	eb.UnsubscribeChannel(event, ch)
 }
 
 // UnsubscribeQueue removes the specified queue for the given event from the queue handlers map.
@@ -228,38 +246,53 @@ func (eb *EventBus) UnsubscribeQueue(event string, queue *cqueue.Queue[any]) {
 
 // SubscribeOnce creates a new subscription for the given event.
 // It will automatically unsubscribe itself after receiving the first message.
-func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) {
+// Returns a cancel function that can be called to cancel the subscription before receiving a message.
+func (eb *EventBus) SubscribeOnce(event string, callback func(message any)) (cancel func()) {
 	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
 	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 	eb.mu.Unlock()
 
+	done := make(chan struct{})
 	go func() {
-		for msg := range ch {
-			if callback != nil {
-				callback(msg)
-			}
-			eb.UnsubscribenChannel(event, ch)
-			// Removed the unconditional break to allow the loop to process all messages.
+		defer close(done)
+		// Only receive one message, then unsubscribe
+		msg, ok := <-ch
+		if ok && callback != nil {
+			callback(msg)
 		}
+		eb.UnsubscribeChannel(event, ch)
 	}()
+
+	return func() {
+		eb.UnsubscribeChannel(event, ch)
+		<-done // Wait for the goroutine to exit
+	}
 }
 
 // SubscribeWithFilter creates a new subscription for the given event with a filter function.
 // It will only pass messages that satisfy the filter condition to the callback.
-func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool, callback func(message any)) {
+// Returns a cancel function that can be called to unsubscribe and prevent goroutine leaks.
+func (eb *EventBus) SubscribeWithFilter(event string, filter func(data any) bool, callback func(message any)) (cancel func()) {
 	ch := make(chan any, eb.capacity)
 	eb.mu.Lock()
 	eb.chanHandlers[event] = append(eb.chanHandlers[event], ch)
 	eb.mu.Unlock()
 
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		for msg := range ch {
 			if filter(msg) && callback != nil {
 				callback(msg)
 			}
 		}
 	}()
+
+	return func() {
+		eb.UnsubscribeChannel(event, ch)
+		<-done // Wait for the goroutine to exit
+	}
 }
 
 // PublishWithQueue sends the data to all queues subscribed to the given event.
@@ -283,24 +316,24 @@ func (eb *EventBus) PublishWithQueue(event string, data any) {
 
 // Publish sends the data to all subscribers of the given event.
 // If there are no subscribers, it does nothing.
+// Non-blocking send: if a channel is full, the message is skipped with a warning.
 func (eb *EventBus) Publish(event string, data any) {
 	eb.mu.RLock()
-	defer eb.mu.RUnlock()
+	subscribers := eb.chanHandlers[event]
+	eb.mu.RUnlock()
 
-	subscribers, ok := eb.chanHandlers[event]
-	if !ok {
+	if len(subscribers) == 0 {
 		return
 	}
 
 	for _, ch := range subscribers {
-		go func(q chan any) {
-			select {
-			case ch <- data:
-			default:
-				// If the channel is full, we skip sending the message.
-				// This prevents blocking the publisher if the channel is full.
-				xlog.Write().Sugar().Warnf("EventBus: channel full, skipping message for event %s", event)
-			}
-		}(ch)
+		// Non-blocking send, no goroutine needed
+		select {
+		case ch <- data:
+		default:
+			// If the channel is full, we skip sending the message.
+			// This prevents blocking the publisher if the channel is full.
+			xlog.Write().Sugar().Warnf("EventBus: channel full, skipping message for event %s", event)
+		}
 	}
 }
