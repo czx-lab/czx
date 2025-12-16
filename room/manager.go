@@ -12,10 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	ErrRoomExists   = errors.New("room already exists")
-	ErrRoomNotFound = errors.New("room not found")
-)
+var ErrRoomExists = errors.New("room already exists")
 
 type RoomManager struct {
 	wg     sync.WaitGroup
@@ -56,33 +53,31 @@ func (rm *RoomManager) Add(room *Room) error {
 
 // Remove removes a room from the manager by its ID.
 // It stops the room and waits for it to finish processing before removing it.
-func (rm *RoomManager) Remove(roomID string) error {
+func (rm *RoomManager) Remove(roomID string) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
 	room, exists := rm.rooms.Get(roomID)
 	if !exists {
-		return ErrRoomNotFound
+		return
 	}
 
 	room.Stop()
 
 	rm.rooms.Delete(roomID)
-
-	return nil
 }
 
 // Get retrieves a room by its ID.
-func (rm *RoomManager) Get(roomID string) (*Room, error) {
+func (rm *RoomManager) Get(roomID string) (*Room, bool) {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
 	room, exists := rm.rooms.Get(roomID)
 	if !exists {
-		return nil, ErrRoomNotFound
+		return nil, false
 	}
 
-	return room, nil
+	return room, true
 }
 
 // Check if the room exists in the manager.
@@ -172,14 +167,14 @@ func (rm *RoomManager) Rooms() []*Room {
 }
 
 // Get the players in the room
-func (rm *RoomManager) Players(roomId string) ([]string, error) {
+func (rm *RoomManager) Players(roomId string) []string {
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 
 	room, ok := rm.rooms.Get(roomId)
 	if !ok {
-		return nil, ErrRoomNotFound
+		return nil
 	}
 
-	return room.Players(), nil
+	return room.Players()
 }

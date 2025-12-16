@@ -37,7 +37,7 @@ func TestPlayer(t *testing.T) {
 
 		m := NewPlayerManager(&ManagerConf{}, nil)
 		m.Add(p)
-		t.Log(m.Player("player_id_1"))
+		t.Log(m.Get("player_id_1"))
 		m.Start()
 
 		time.Sleep(time.Second * 25)

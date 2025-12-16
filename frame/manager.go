@@ -8,10 +8,7 @@ import (
 	"github.com/czx-lab/czx/container/recycler"
 )
 
-var (
-	ErrLoopExists   = errors.New("loop already exists")
-	ErrLoopNotFound = errors.New("loop not found")
-)
+var ErrLoopExists = errors.New("loop already exists")
 
 type LoopManager struct {
 	wg    sync.WaitGroup
@@ -51,13 +48,13 @@ func (lm *LoopManager) Add(id string, loop *Loop) error {
 
 // Remove removes a loop from the manager by its ID.
 // It stops the loop and waits for it to finish processing before removing it.
-func (lm *LoopManager) Remove(id string) error {
+func (lm *LoopManager) Remove(id string) {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
 	loop, exists := lm.loops.Get(id)
 	if !exists {
-		return ErrLoopNotFound
+		return
 	}
 
 	// Stop the loop
@@ -65,22 +62,20 @@ func (lm *LoopManager) Remove(id string) error {
 
 	// Remove the loop from the manager
 	lm.loops.Delete(id)
-
-	return nil
 }
 
 // Get retrieves a loop by its ID.
 // It returns an error if the loop is not found.
-func (lm *LoopManager) Get(id string) (*Loop, error) {
+func (lm *LoopManager) Get(id string) *Loop {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
 	loop, exists := lm.loops.Get(id)
 	if !exists {
-		return nil, ErrLoopNotFound
+		return nil
 	}
 
-	return loop, nil
+	return loop
 }
 
 // Loops returns a slice of all loops managed by the LoopManager.
