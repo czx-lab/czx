@@ -1,5 +1,7 @@
 package network
 
+import fb "github.com/google/flatbuffers/go"
+
 type (
 	ProcessorConf struct {
 		// LittleEndian indicates if the processor should use little-endian byte order.
@@ -17,7 +19,12 @@ type (
 		ID uint16
 		// Data of the message.
 		Data any
+		// Serializer function for the message.
+		Fn any
 	}
+
+	// FlatbuffersSerializerFn defines the function signature for serializing Flatbuffers messages.
+	FlatbuffersSerializerFn func(*fb.Builder, any) fb.UOffsetT
 
 	// message format
 	// protobuf: stateless code

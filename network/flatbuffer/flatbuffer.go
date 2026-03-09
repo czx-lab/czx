@@ -13,9 +13,10 @@ import (
 
 type (
 	message_t struct {
-		id      uint16
-		type_   reflect.Type
-		handler network.Handler
+		id           uint16
+		type_        reflect.Type
+		handler      network.Handler
+		serializerFn func(*fb.Builder, any) fb.UOffsetT
 	}
 	Processor struct {
 		ids      map[reflect.Type]uint16
@@ -46,12 +47,17 @@ func (p *Processor) Marshal(msgs any) ([][]byte, error) {
 	} else {
 		binary.BigEndian.PutUint16(msgid, id)
 	}
-	fn, ok := msgs.(interface{ Bytes() []byte })
-	if ok {
-		data := fn.Bytes()
-		return [][]byte{msgid, data}, nil
-	}
-	return nil, errors.New("flatbuffers: message does not implement Bytes() []byte")
+
+	builder := fb.NewBuilder(256)
+	info := p.messages[id]
+	offset := info.serializerFn(builder, msgs)
+	builder.Finish(offset)
+
+	raw := builder.FinishedBytes()
+	data := make([]byte, len(raw))
+	copy(data, raw)
+
+	return [][]byte{msgid, data}, nil
 }
 
 // MarshalWithCode implements network.Processor.
@@ -105,9 +111,14 @@ func (p *Processor) Register(msg network.Message) error {
 		return fmt.Errorf("too many flatbuffers messages (max = %v)", math.MaxUint16)
 	}
 
+	if msg.Fn == nil {
+		return errors.New("flatbuffers: serializer function cannot be nil")
+	}
+
 	p.messages[msg.ID] = &message_t{
-		type_: type_t,
-		id:    msg.ID,
+		type_:        type_t,
+		id:           msg.ID,
+		serializerFn: msg.Fn.(network.FlatbuffersSerializerFn),
 	}
 	p.ids[type_t] = msg.ID
 	return nil
@@ -142,14 +153,20 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("flatbuffers: message ID %d not registered", id)
 	}
-	msg, ok := info.type_.(interface{ Init([]byte, fb.UOffsetT) })
+
+	instance := reflect.New(info.type_.Elem()).Interface()
+	msg, ok := instance.(interface{ Init([]byte, fb.UOffsetT) })
 	if !ok {
 		return nil, fmt.Errorf("flatbuffers: message %s does not implement Init method", info.type_)
 	}
+
 	buf := data[2:]
+	if len(buf) < 4 {
+		return nil, errors.New("flatbuffers data too short for message")
+	}
 	pos := fb.GetUOffsetT(buf)
 	msg.Init(buf, pos)
-	return msg, nil
+	return instance, nil
 }
 
 var _ network.Processor = (*Processor)(nil)
