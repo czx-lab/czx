@@ -25,6 +25,7 @@ type WsServerConf struct {
 	PendingWriteNum int
 	Timeout         int
 	MaxMsgSize      uint32
+	NoDelay         bool
 	// If ImmediateRelease is true, the server will release resources immediately after stopping.
 	// This may lead to abrupt disconnections for active connections.
 	// If false, the server will wait for all active connections to close gracefully before releasing resources.
@@ -85,6 +86,13 @@ func (handler *WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handler.metrics.IncFailedConns()
 		http.Error(w, fmt.Sprintf("Failed to upgrade connection: %s", err.Error()), http.StatusInternalServerError)
 		return
+	}
+
+	// Set TCP NoDelay if configured
+	if handler.opt.NoDelay {
+		if tcpConn, ok := conn.NetConn().(*net.TCPConn); ok {
+			tcpConn.SetNoDelay(true)
+		}
 	}
 
 	handler.wg.Add(1)
