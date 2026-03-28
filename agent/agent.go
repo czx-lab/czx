@@ -218,7 +218,7 @@ func (a *agent) Write(msg any) error {
 }
 
 // WriteWithCode implements network.Agent.
-func (a *agent) WriteWithCode(code uint16, msg any) error {
+func (a *agent) WriteWithCode(code uint, msg any) error {
 	if a.gate.processor == nil {
 		return ErrProcessorNotFound
 	}

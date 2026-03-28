@@ -199,7 +199,7 @@ func (p *PlayerManager) Broadcast(msg BroadcastMessage) error {
 			return
 		}
 
-		player.Agent().WriteWithCode(msg.Code, msg.Data)
+		player.Agent().WriteWithCode(uint(msg.Code), msg.Data)
 	})
 }
 
@@ -215,7 +215,7 @@ func (p *PlayerManager) BroadcastExcepts(msg BroadcastMessage, ids ...string) er
 			return
 		}
 
-		player.Agent().WriteWithCode(msg.Code, msg.Data)
+		player.Agent().WriteWithCode(uint(msg.Code), msg.Data)
 	})
 }
 
@@ -232,7 +232,7 @@ func (p *PlayerManager) BroadcastByIds(msg BroadcastMessage, ids ...string) erro
 			return
 		}
 
-		player.Agent().WriteWithCode(msg.Code, msg.Data)
+		player.Agent().WriteWithCode(uint(msg.Code), msg.Data)
 	})
 }
 
@@ -249,7 +249,7 @@ func (p *PlayerManager) BroadcastByFunc(msg BroadcastMessage, fn func(*Player) b
 			return
 		}
 
-		player.Agent().WriteWithCode(msg.Code, msg.Data)
+		player.Agent().WriteWithCode(uint(msg.Code), msg.Data)
 	})
 }
 

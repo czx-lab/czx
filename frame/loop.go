@@ -15,8 +15,8 @@ const (
 
 	// LoopTypeNormal indicates a normal game loop
 	LoopTypeNormal = "normal"
-	// LoopTypeFream indicates a synchronous game loop
-	LoopTypeFream = "frame"
+	// LoopTypeFrame indicates a synchronous game loop
+	LoopTypeFrame = "frame"
 )
 
 type (
@@ -56,7 +56,7 @@ func NewLoop(conf LoopConf) (*Loop, error) {
 	if conf.LoopType == LoopTypeNormal {
 		loop.normalQueue = make(chan Message, conf.MaxQueueSize)
 	}
-	if conf.LoopType == LoopTypeFream {
+	if conf.LoopType == LoopTypeFrame {
 		loop.frameQueue = make(map[string][]Message)
 		loop.playerIds = make(map[string]uint)
 	}
@@ -84,7 +84,7 @@ func (l *Loop) WithFrameProc(frameProc FrameProcessor) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	if l.conf.LoopType != LoopTypeFream {
+	if l.conf.LoopType != LoopTypeFrame {
 		return errors.New("frame processor can only be set for sync loop type")
 	}
 
@@ -110,7 +110,7 @@ func (l *Loop) Start() {
 				case LoopTypeNormal:
 					// Process normal messages
 					l.processN()
-				case LoopTypeFream:
+				case LoopTypeFrame:
 					// Process the current frame and its inputs
 					l.processF()
 				}
@@ -127,7 +127,7 @@ func (l *Loop) Start() {
 		if l.normalProc != nil {
 			l.normalProc.OnClose()
 		}
-	case LoopTypeFream:
+	case LoopTypeFrame:
 		if l.frameProc != nil {
 			l.frameProc.OnClose()
 		}
@@ -317,6 +317,14 @@ func (l *Loop) Frequency(frequency uint) error {
 	}
 
 	return nil
+}
+
+// ResetFrameId resets the current frame ID to the specified value.
+func (l *Loop) ResetFrameId(frameId uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.frameId = frameId
 }
 
 func defaultConf(conf *LoopConf) {

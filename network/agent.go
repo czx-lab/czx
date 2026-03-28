@@ -12,7 +12,7 @@ type (
 		Write(msg any) error
 		// WriteWithCode sends a message with a specific error code to the connection.
 		// This is useful for sending error messages or status codes.
-		WriteWithCode(code uint16, msg any) error
+		WriteWithCode(code uint, msg any) error
 		// LocalAddr returns the local address of the connection.
 		LocalAddr() net.Addr
 		// RemoteAddr returns the remote address of the connection.

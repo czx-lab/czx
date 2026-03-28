@@ -73,7 +73,7 @@ func TestLoop(t *testing.T) {
 		// Create a new loop with default configuration
 		loop, _ := NewLoop(LoopConf{
 			Frequency: 60,
-			LoopType:  LoopTypeFream,
+			LoopType:  LoopTypeFrame,
 		})
 		if err := loop.WithFrameProc(&frameProcessorMock{}); err != nil {
 			t.Fatalf("Failed to set normal processor: %v", err)
