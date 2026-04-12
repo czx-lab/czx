@@ -1,7 +1,6 @@
 package flatbuffer
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -13,22 +12,22 @@ import (
 
 type (
 	message_t struct {
-		id           uint16
+		id           uint
 		type_        reflect.Type
 		handler      network.Handler
 		serializerFn func(*fb.Builder, any) fb.UOffsetT
 	}
 	Processor struct {
-		ids      map[reflect.Type]uint16
-		messages map[uint16]*message_t
+		ids      map[reflect.Type]uint
+		messages map[uint]*message_t
 		option   network.ProcessorConf
 	}
 )
 
 func NewProcessor(opt network.ProcessorConf) *Processor {
 	return &Processor{
-		ids:      make(map[reflect.Type]uint16),
-		messages: make(map[uint16]*message_t),
+		ids:      make(map[reflect.Type]uint),
+		messages: make(map[uint]*message_t),
 		option:   opt,
 	}
 }
@@ -41,12 +40,8 @@ func (p *Processor) Marshal(msgs any) ([][]byte, error) {
 		return nil, fmt.Errorf("flatbuffers: message %v not registered", type_t)
 	}
 
-	msgid := make([]byte, 2)
-	if p.option.LittleEndian {
-		binary.LittleEndian.PutUint16(msgid, id)
-	} else {
-		binary.BigEndian.PutUint16(msgid, id)
-	}
+	msgid := make([]byte, p.option.IDLength)
+	network.PutID(msgid, id, p.option)
 
 	builder := fb.NewBuilder(256)
 	info := p.messages[id]
@@ -61,18 +56,14 @@ func (p *Processor) Marshal(msgs any) ([][]byte, error) {
 }
 
 // MarshalWithCode implements network.Processor.
-func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
+func (p *Processor) MarshalWithCode(code uint, msg any) ([][]byte, error) {
 	msgs, err := p.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	msgcode := make([]byte, 2)
-	if p.option.LittleEndian {
-		binary.LittleEndian.PutUint16(msgcode, code)
-	} else {
-		binary.BigEndian.PutUint16(msgcode, code)
-	}
+	msgcode := make([]byte, p.option.CodeLength)
+	network.PutCode(msgcode, code, p.option)
 
 	smsgs := [][]byte{msgcode}
 	smsgs = append(smsgs, msgs...)
@@ -107,18 +98,23 @@ func (p *Processor) Register(msg network.Message) error {
 	if _, ok := p.ids[type_t]; ok {
 		return fmt.Errorf("flatbuffers: message %v is already registered", type_t)
 	}
-	if len(p.messages) >= math.MaxUint16 {
-		return fmt.Errorf("too many flatbuffers messages (max = %v)", math.MaxUint16)
+	if len(p.messages) >= math.MaxInt {
+		return fmt.Errorf("too many flatbuffers messages (max = %v)", math.MaxInt)
 	}
 
 	if msg.Fn == nil {
 		return errors.New("flatbuffers: serializer function cannot be nil")
 	}
 
+	fn, ok := msg.Fn.(network.FlatbuffersSerializerFn)
+	if !ok {
+		return fmt.Errorf("flatbuffers: serializer function must be of type network.FlatbuffersSerializerFn")
+	}
+
 	p.messages[msg.ID] = &message_t{
 		type_:        type_t,
 		id:           msg.ID,
-		serializerFn: msg.Fn.(network.FlatbuffersSerializerFn),
+		serializerFn: fn,
 	}
 	p.ids[type_t] = msg.ID
 	return nil
@@ -138,15 +134,9 @@ func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 
 // Unmarshal implements network.Processor.
 func (p *Processor) Unmarshal(data []byte) (any, error) {
-	if len(data) < 2 {
-		return nil, errors.New("flatbuffers data too short")
-	}
-
-	var id uint16
-	if p.option.LittleEndian {
-		id = binary.LittleEndian.Uint16(data)
-	} else {
-		id = binary.BigEndian.Uint16(data)
+	id, err := network.GetID(data, p.option)
+	if err != nil {
+		return nil, err
 	}
 
 	info, ok := p.messages[id]
@@ -160,7 +150,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 		return nil, fmt.Errorf("flatbuffers: message %s does not implement Init method", info.type_)
 	}
 
-	buf := data[2:]
+	buf := data[p.option.IDLength:]
 	if len(buf) < 4 {
 		return nil, errors.New("flatbuffers data too short for message")
 	}

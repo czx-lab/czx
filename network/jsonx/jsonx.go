@@ -1,7 +1,6 @@
 package jsonx
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,31 +40,27 @@ func (p *Processor) Marshal(msgs any) ([][]byte, error) {
 		return nil, errors.New("json message pointer required")
 	}
 
-	msgname := msgtype.Elem().Name()
-	if _, ok := p.messages[msgname]; !ok {
-		return nil, fmt.Errorf("message %v not registered", msgname)
+	mname := msgtype.Elem().Name()
+	if _, ok := p.messages[mname]; !ok {
+		return nil, fmt.Errorf("message %v not registered", mname)
 	}
 
-	m := map[string]any{msgname: msgs}
+	m := map[string]any{mname: msgs}
 	data, err := json.Marshal(m)
 	return [][]byte{data}, err
 }
 
 // MarshalWithCode implements network.Processor.
-func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
+func (p *Processor) MarshalWithCode(code uint, msg any) ([][]byte, error) {
 	msgs, err := p.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	msgcode := make([]byte, 2)
-	if p.conf.LittleEndian {
-		binary.LittleEndian.PutUint16(msgcode, code)
-	} else {
-		binary.BigEndian.PutUint16(msgcode, code)
-	}
+	mcode := make([]byte, p.conf.CodeLength)
+	network.PutCode(mcode, code, p.conf)
 
-	smsgs := [][]byte{msgcode}
+	smsgs := [][]byte{mcode}
 	smsgs = append(smsgs, msgs...)
 	return smsgs, nil
 }

@@ -1,7 +1,6 @@
 package protobuf
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -16,23 +15,23 @@ type (
 	// message represents a protobuf message with its ID, type, and handler.
 	// It also contains a raw handler for processing raw data.
 	message struct {
-		id      uint16
+		id      uint
 		msgtype reflect.Type
 		handler network.Handler
 	}
 	// Processor is a protobuf message processor that handles marshalling,
 	// unmarshalling, and processing of protobuf messages.
 	Processor struct {
-		ids      map[reflect.Type]uint16
-		messages map[uint16]*message
+		ids      map[reflect.Type]uint
+		messages map[uint]*message
 		option   network.ProcessorConf
 	}
 )
 
 func NewProcessor(opt network.ProcessorConf) *Processor {
 	return &Processor{
-		ids:      make(map[reflect.Type]uint16),
-		messages: make(map[uint16]*message),
+		ids:      make(map[reflect.Type]uint),
+		messages: make(map[uint]*message),
 		option:   opt,
 	}
 }
@@ -45,32 +44,25 @@ func (p *Processor) Marshal(msg any) ([][]byte, error) {
 		return nil, fmt.Errorf("protobuf: message %v not registered", msgtype)
 	}
 
-	msgid := make([]byte, 2)
-	if p.option.LittleEndian {
-		binary.LittleEndian.PutUint16(msgid, id)
-	} else {
-		binary.BigEndian.PutUint16(msgid, id)
-	}
+	msgid := make([]byte, p.option.IDLength)
+
+	network.PutID(msgid, id, p.option)
 
 	data, err := proto.Marshal(msg.(proto.Message))
 	return [][]byte{msgid, data}, err
 }
 
 // MarshalWithCode implements network.Processor.
-func (p *Processor) MarshalWithCode(code uint16, msg any) ([][]byte, error) {
+func (p *Processor) MarshalWithCode(code uint, msg any) ([][]byte, error) {
 	msgs, err := p.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 
-	msgcode := make([]byte, 2)
-	if p.option.LittleEndian {
-		binary.LittleEndian.PutUint16(msgcode, code)
-	} else {
-		binary.BigEndian.PutUint16(msgcode, code)
-	}
+	mcode := make([]byte, p.option.CodeLength)
+	network.PutCode(mcode, code, p.option)
 
-	smsgs := [][]byte{msgcode}
+	smsgs := [][]byte{mcode}
 	smsgs = append(smsgs, msgs...)
 	return smsgs, nil
 }
@@ -96,15 +88,9 @@ func (p *Processor) Process(data any, agent network.Agent) error {
 
 // Unmarshal implements network.Processor.
 func (p *Processor) Unmarshal(data []byte) (any, error) {
-	if len(data) < 2 {
-		return nil, errors.New("protobuf data too short")
-	}
-
-	var id uint16
-	if p.option.LittleEndian {
-		id = binary.LittleEndian.Uint16(data)
-	} else {
-		id = binary.BigEndian.Uint16(data)
+	id, err := network.GetID(data, p.option)
+	if err != nil {
+		return nil, err
 	}
 
 	info, ok := p.messages[id]
@@ -113,7 +99,7 @@ func (p *Processor) Unmarshal(data []byte) (any, error) {
 	}
 
 	msg := reflect.New(info.msgtype.Elem()).Interface()
-	return msg, proto.Unmarshal(data[2:], msg.(proto.Message))
+	return msg, proto.Unmarshal(data[p.option.IDLength:], msg.(proto.Message))
 }
 
 // Register implements network.Processor.
@@ -125,8 +111,8 @@ func (p *Processor) Register(msg network.Message) error {
 	if _, ok := p.ids[msgtype]; ok {
 		return fmt.Errorf("protobuf: message %v is already registered", msgtype)
 	}
-	if len(p.messages) >= math.MaxUint16 {
-		return fmt.Errorf("too many protobuf messages (max = %v)", math.MaxUint16)
+	if len(p.messages) >= math.MaxInt {
+		return fmt.Errorf("too many protobuf messages (max = %v)", math.MaxInt)
 	}
 
 	p.messages[msg.ID] = &message{
@@ -150,9 +136,9 @@ func (p *Processor) RegisterHandler(msg any, handler network.Handler) error {
 }
 
 // Range implements network.Processor.
-func (p *Processor) Range(fn func(id uint16, msgtyoe reflect.Type)) {
+func (p *Processor) Range(fn func(id uint, msgtype reflect.Type)) {
 	for _, i := range p.messages {
-		fn(uint16(i.id), i.msgtype)
+		fn(i.id, i.msgtype)
 	}
 }
 
