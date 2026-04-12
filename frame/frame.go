@@ -242,14 +242,14 @@ func (f *FrameLoop) DeletePlayer(playerId string) {
 
 // Write implements [LoopFace].
 func (f *FrameLoop) Write(in Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	select {
 	case <-f.done:
 		return errors.New("loop is closed")
 	default:
 	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	// Check if player is registered
 	if _, exists := f.ids[in.PlayerID]; !exists {

@@ -15,10 +15,10 @@ func Search[T any, S ~[]T](s S, f func(T) bool) (int, bool) {
 
 // Reverse reverses the order of elements in a slice.
 // It creates a new slice and returns it, leaving the original slice unchanged.
-func Reverse[T any, S ~[]T](s S) []T {
+func Reverse[T any, S ~[]T](s S) S {
 	reversed := make(S, len(s))
 	copy(reversed, s)
-	for i := range len(reversed) / 2 {
+	for i := range reversed[:len(reversed)/2] {
 		j := len(reversed) - 1 - i
 		reversed[i], reversed[j] = reversed[j], reversed[i]
 	}

@@ -24,6 +24,7 @@ type (
 		proc   NormalProcessor
 		done   chan struct{}
 		once   sync.Once
+		wg     sync.WaitGroup
 	}
 )
 
@@ -55,6 +56,9 @@ func (n *Normal) Start(ctx context.Context) error {
 		return errors.New("processor is not set")
 	}
 	n.mu.RUnlock()
+
+	n.wg.Add(1)
+	defer n.wg.Done()
 
 	frequency := time.Second / time.Duration(n.conf.Frequency)
 	ticker := time.NewTicker(frequency)
@@ -98,7 +102,11 @@ func (n *Normal) exec() {
 		select {
 		case <-n.done:
 			return
-		case data := <-n.queue:
+		case data, ok := <-n.queue:
+			if !ok {
+				return
+			}
+
 			// Process the message
 			proc.Process(data)
 			processed++
@@ -113,23 +121,24 @@ func (n *Normal) exec() {
 func (n *Normal) Stop() {
 	n.once.Do(func() {
 		close(n.done)
+		n.wg.Wait()
 		close(n.queue)
+
+		n.mu.RLock()
+		proc := n.proc
+		n.mu.RUnlock()
+
+		if proc == nil {
+			return
+		}
+
+		// Drain the queue to ensure all messages are processed before stopping
+		for data := range n.queue {
+			proc.Process(data)
+		}
+
+		proc.OnClose()
 	})
-
-	n.mu.RLock()
-	proc := n.proc
-	n.mu.RUnlock()
-
-	if proc == nil {
-		return
-	}
-
-	// Drain the queue to ensure all messages are processed before stopping
-	for data := range n.queue {
-		proc.Process(data)
-	}
-
-	proc.OnClose()
 }
 
 // Write implements [LoopFace].

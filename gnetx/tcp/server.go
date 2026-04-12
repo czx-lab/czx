@@ -80,7 +80,7 @@ func (g *GnetTcpServer) WithTick(delay time.Duration, fn func()) {
 	g.tickFn = fn
 }
 
-func (g *GnetTcpServer) Start() {
+func (g *GnetTcpServer) Start() error {
 	addrs := strings.Split(g.conf.Addr, ":")
 	opts := []gnet.Option{
 		gnet.WithMulticore(g.conf.Multicore),
@@ -90,6 +90,8 @@ func (g *GnetTcpServer) Start() {
 	}
 
 	go gnet.Run(g, strings.TrimSpace(addrs[0]), opts...)
+
+	return nil
 }
 
 func (g *GnetTcpServer) Stop() {

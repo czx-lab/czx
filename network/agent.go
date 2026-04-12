@@ -34,4 +34,11 @@ type (
 		// It takes an Agent and a PreHandlerMessage as arguments and returns an error.
 		OnPreConn(ClientAddrMessage)
 	}
+	// ServerFace is an interface for managing the server lifecycle, including starting and stopping the server.
+	ServerFace interface {
+		// Start starts the server and begins accepting connections.
+		Start() error
+		// Stop stops the server and closes all active connections.
+		Stop()
+	}
 )

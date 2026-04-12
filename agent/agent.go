@@ -32,9 +32,6 @@ type (
 	Gate struct {
 		option    GateConf
 		processor network.Processor
-		wsSrv     *ws.WsServer
-		tcpSrv    *xtcp.TcpServer
-		kcpSrv    *xkcp.KcpServer
 		gnetcpSrv *gnetcp.GnetTcpServer
 		eventBus  *eventbus.EventBus
 		preConn   network.PreConnHandler
@@ -85,15 +82,12 @@ func (g *Gate) WithEventBus(bus *eventbus.EventBus) *Gate {
 	return g
 }
 
-func (g *Gate) Start() {
-	// Default event bus
-	// If no event bus is provided, use the default event bus.
-	if g.eventBus == nil {
-		g.eventBus = eventbus.NewEventBus(0, eventbus.EvtXqueueType)
-	}
+func (g *Gate) server() []network.ServerFace {
+	var servers []network.ServerFace
 
+	// Create WebSocket server if the address is provided in the configuration
 	if len(g.option.WsServerConf.Addr) > 0 {
-		g.wsSrv = ws.NewServer(&g.option.WsServerConf, func(wc *ws.WsConn) network.Agent {
+		wsSrv := ws.NewServer(&g.option.WsServerConf, func(wc *ws.WsConn) network.Agent {
 			a := &agent{conn: wc, gate: g}
 			if a.gate.eventBus != nil {
 				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
@@ -101,21 +95,14 @@ func (g *Gate) Start() {
 
 			return a
 		})
-		g.wsSrv.Start()
-	}
-	if len(g.option.TcpServerConf.Addr) > 0 {
-		g.tcpSrv = xtcp.NewServer(&g.option.TcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
-			a := &agent{conn: tc, gate: g}
-			if a.gate.eventBus != nil {
-				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
-			}
 
-			return a
-		})
-		g.tcpSrv.Start()
+		servers = append(servers, wsSrv)
 	}
+
+	// Create TCP server if the address is provided in the configuration
+	// If both GNet TCP server and regular TCP server are configured, GNet TCP server will be used.
 	if len(g.option.GnetTcpServerConf.Addr) > 0 {
-		g.gnetcpSrv = gnetcp.NewGNetTcpServer(&g.option.GnetTcpServerConf, func(c network.Conn) network.Agent {
+		gnetcpSrv := gnetcp.NewGNetTcpServer(&g.option.GnetTcpServerConf, func(c network.Conn) network.Agent {
 			a := &agent{conn: c, gate: g}
 			if a.gate.eventBus != nil {
 				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
@@ -123,10 +110,10 @@ func (g *Gate) Start() {
 
 			return a
 		})
-		g.gnetcpSrv.Start()
-	}
-	if len(g.option.KcpServerConf.Addr) > 0 {
-		g.kcpSrv = xkcp.NewKcpServer(g.option.KcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
+
+		servers = append(servers, gnetcpSrv)
+	} else if len(g.option.TcpServerConf.Addr) > 0 {
+		tcpSrv := xtcp.NewServer(&g.option.TcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
 			a := &agent{conn: tc, gate: g}
 			if a.gate.eventBus != nil {
 				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
@@ -134,7 +121,41 @@ func (g *Gate) Start() {
 
 			return a
 		})
-		g.kcpSrv.Start()
+
+		servers = append(servers, tcpSrv)
+	}
+
+	// Create KCP server if the address is provided in the configuration
+	if len(g.option.KcpServerConf.Addr) > 0 {
+		kcpSrv := xkcp.NewKcpServer(g.option.KcpServerConf, func(tc *xtcp.TcpConn) network.Agent {
+			a := &agent{conn: tc, gate: g}
+			if a.gate.eventBus != nil {
+				a.gate.eventBus.PublishWithQueue(eventbus.EvtNewAgent, a)
+			}
+
+			return a
+		})
+
+		servers = append(servers, kcpSrv)
+	}
+
+	return servers
+}
+
+func (g *Gate) Start() {
+	// Default event bus
+	// If no event bus is provided, use the default event bus.
+	if g.eventBus == nil {
+		g.eventBus = eventbus.NewEventBus(0, eventbus.EvtXqueueType)
+	}
+
+	servers := g.server()
+
+	for _, srv := range servers {
+		if err := srv.Start(); err != nil {
+			xlog.Write().Error("failed to start server", zap.Error(err))
+			return
+		}
 	}
 
 	// Handle graceful shutdown on Ctrl+C
@@ -146,14 +167,8 @@ func (g *Gate) Start() {
 		<-sig
 	}
 
-	if g.wsSrv != nil {
-		g.wsSrv.Stop()
-	}
-	if g.tcpSrv != nil {
-		g.tcpSrv.Stop()
-	}
-	if g.gnetcpSrv != nil {
-		g.gnetcpSrv.Stop()
+	for _, srv := range servers {
+		srv.Stop()
 	}
 }
 
