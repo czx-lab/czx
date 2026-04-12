@@ -13,7 +13,6 @@ var ErrLoopExists = errors.New("loop already exists")
 
 type LoopManager struct {
 	wg    sync.WaitGroup
-	mu    sync.RWMutex
 	loops *cmap.CMap[string, LoopFace]
 	ctx   context.Context
 }
@@ -29,9 +28,6 @@ func NewManager(r recycler.Recycler, ctx context.Context) *LoopManager {
 // Add adds a new loop to the manager.
 // It starts the loop in a separate goroutine.
 func (lm *LoopManager) Add(id string, loop LoopFace) error {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
 	if lm.loops.Has(id) {
 		return ErrLoopExists
 	}
@@ -52,9 +48,6 @@ func (lm *LoopManager) Add(id string, loop LoopFace) error {
 // Remove removes a loop from the manager by its ID.
 // It stops the loop and waits for it to finish processing before removing it.
 func (lm *LoopManager) Remove(id string) {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
 	loop, exists := lm.loops.Get(id)
 	if !exists {
 		return
@@ -70,9 +63,6 @@ func (lm *LoopManager) Remove(id string) {
 // Get retrieves a loop by its ID.
 // It returns an error if the loop is not found.
 func (lm *LoopManager) Get(id string) LoopFace {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
 	loop, exists := lm.loops.Get(id)
 	if !exists {
 		return nil
@@ -84,9 +74,6 @@ func (lm *LoopManager) Get(id string) LoopFace {
 // Loops returns a slice of all loops managed by the LoopManager.
 // It does not lock the manager, so it may return a snapshot of the loops at the time of the call.
 func (lm *LoopManager) Loops() []LoopFace {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
 	loops := make([]LoopFace, 0, lm.loops.Len())
 	lm.loops.Iterator(func(_ string, loop LoopFace) bool {
 		loops = append(loops, loop)
@@ -99,27 +86,18 @@ func (lm *LoopManager) Loops() []LoopFace {
 // Has checks if a loop exists in the manager by its ID.
 // It returns true if the loop exists, false otherwise.
 func (lm *LoopManager) Has(id string) bool {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
 	return lm.loops.Has(id)
 }
 
 // Count returns the number of loops managed by the LoopManager.
 // It locks the manager to ensure thread safety while counting.
 func (lm *LoopManager) Count() int {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
 	return lm.loops.Len()
 }
 
 // ALLID returns a slice of all loop IDs managed by the LoopManager.
 // It locks the manager to ensure thread safety while accessing the IDs.
 func (lm *LoopManager) ALLID() []string {
-	lm.mu.RLock()
-	defer lm.mu.RUnlock()
-
 	ids := make([]string, 0, lm.loops.Len())
 	lm.loops.Iterator(func(s string, _ LoopFace) bool {
 		ids = append(ids, s)
@@ -131,9 +109,6 @@ func (lm *LoopManager) ALLID() []string {
 
 // Stop stops all loops and waits for them to finish.
 func (lm *LoopManager) Stop() {
-	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
 	// Stop all loops
 	lm.loops.Iterator(func(s string, l LoopFace) bool {
 		l.Stop()

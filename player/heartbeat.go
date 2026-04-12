@@ -3,6 +3,7 @@
 package player
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,7 +23,9 @@ type (
 		players *cmap.Shareded[*Player, struct{}]
 		ticker  *time.Ticker
 		stop    chan struct{}
-		closed  atomic.Bool
+		wg      sync.WaitGroup
+		started atomic.Bool
+		once    sync.Once
 	}
 )
 
@@ -46,16 +49,19 @@ func NewHeartbeat(conf HeartbeatConf, r recycler.Recycler) *Heartbeat {
 // Heartbeat starts the heartbeat process for all registered players at the specified interval.
 // It sends a heartbeat signal to each player at the specified interval.
 func (hm *Heartbeat) Start(interval time.Duration) {
-	if !hm.closed.CompareAndSwap(false, true) {
+	if !hm.started.CompareAndSwap(false, true) {
 		return
 	}
 
+	hm.wg.Add(1)
 	hm.stop = make(chan struct{})
 	hm.ticker = time.NewTicker(interval)
 	go func() {
 		defer func() {
+			hm.wg.Done()
 			hm.ticker.Stop()
 			hm.ticker = nil
+			hm.started.Store(false)
 		}()
 
 		for {
@@ -75,16 +81,15 @@ func (hm *Heartbeat) Start(interval time.Duration) {
 // Stop stops the heartbeat process and closes the stop channel.
 // It should be called when the application is shutting down to clean up resources.
 func (hm *Heartbeat) Stop() {
-	if !hm.closed.CompareAndSwap(true, false) {
+	if !hm.started.Load() {
 		return
 	}
 
-	select {
-	case <-hm.stop:
-	default:
+	hm.once.Do(func() {
 		close(hm.stop)
-	}
+	})
 
+	hm.wg.Wait()
 	hm.players.Clear()
 }
 

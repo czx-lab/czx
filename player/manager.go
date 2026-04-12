@@ -4,7 +4,6 @@ import (
 	"errors"
 	"hash/fnv"
 	"slices"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +20,6 @@ type (
 		cmap.Option[string]
 	}
 	PlayerManager struct {
-		sync.RWMutex
 		conf      *ManagerConf
 		players   *cmap.Shareded[string, *Player]
 		closed    atomic.Bool
@@ -60,8 +58,6 @@ func (p *PlayerManager) WithHeartbeat(hb *Heartbeat) *PlayerManager {
 // Add adds a new player to the player manager. If the player already exists, it returns an error.
 // It returns an error if the player already exists.
 func (p *PlayerManager) Add(player *Player) error {
-	p.Lock()
-	defer p.Unlock()
 	if p.players.Has(player.ID()) {
 		return ErrPlayerAdded
 	}
@@ -84,18 +80,12 @@ func (p *PlayerManager) Add(player *Player) error {
 
 // Has checks if a player with the given ID exists in the player manager.
 func (p *PlayerManager) Has(id string) bool {
-	p.RLock()
-	defer p.RUnlock()
-
 	return p.players.Has(id)
 }
 
 // Get retrieves the agent from the player. If the agent is not found, it returns an error.
 // This function is not thread-safe, so it should be called with the player locked.
 func (p *PlayerManager) Get(id string) (*Player, bool) {
-	p.RLock()
-	defer p.RUnlock()
-
 	player, ok := p.players.Get(id)
 	if !ok {
 		return nil, false
@@ -106,7 +96,7 @@ func (p *PlayerManager) Get(id string) (*Player, bool) {
 // Start starts the heartbeat process for all registered players at the specified interval.
 // It sends a heartbeat signal to each player at the specified interval.
 func (p *PlayerManager) Start() {
-	if p.closed.Load() {
+	if !p.closed.Load() {
 		return
 	}
 
@@ -125,30 +115,22 @@ func (p *PlayerManager) Start() {
 // Players retrieves all agents from the player. This function is not thread-safe, so it should be called with the player locked.
 // It returns a slice of agents.
 func (p *PlayerManager) Players() []*Player {
-	p.RLock()
-	defer p.RUnlock()
-
 	players := make([]*Player, 0, p.players.Len())
 	p.players.Iterator(func(id string, player *Player) bool {
 		players = append(players, player)
 		return true
 	})
+
 	return players
 }
 
 // Num returns the number of players in the player manager.
 func (p *PlayerManager) Num() int {
-	p.RLock()
-	defer p.RUnlock()
-
 	return p.players.Len()
 }
 
 // Delete removes a player from the player manager by ID.
 func (p *PlayerManager) Delete(id string) {
-	p.Lock()
-	defer p.Unlock()
-
 	if !p.players.Has(id) {
 		return
 	}
@@ -160,9 +142,6 @@ func (p *PlayerManager) Delete(id string) {
 
 // Remove removes a player from the player manager.
 func (p *PlayerManager) Remove(id string, destroy bool) {
-	p.Lock()
-	defer p.Unlock()
-
 	if !p.players.Has(id) {
 		return
 	}
@@ -180,13 +159,11 @@ func (p *PlayerManager) Remove(id string, destroy bool) {
 
 // Rang iterates over all players and applies the provided function to each player.
 func (p *PlayerManager) Rang(fn func(*Player)) error {
-	p.RLock()
-	defer p.RUnlock()
-
 	p.players.Iterator(func(_ string, player *Player) bool {
 		fn(player)
 		return true
 	})
+
 	return nil
 }
 
@@ -263,9 +240,6 @@ func (p *PlayerManager) Close() {
 	if p.closed.Swap(true) {
 		return
 	}
-
-	p.RLock()
-	defer p.RUnlock()
 
 	p.players.Iterator(func(_ string, player *Player) bool {
 		player.Close()

@@ -16,7 +16,6 @@ var ErrRoomExists = errors.New("room already exists")
 
 type RoomManager struct {
 	wg     sync.WaitGroup
-	mu     sync.RWMutex
 	rooms  *cmap.Shareded[string, *Room]
 	closed atomic.Bool
 }
@@ -30,9 +29,6 @@ func NewRoomManager(opt cmap.Option[string], r recycler.Recycler) *RoomManager {
 
 // Add adds a new room to the manager.
 func (rm *RoomManager) Add(room *Room) error {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
 	if rm.rooms.Has(room.ID()) {
 		return ErrRoomExists
 	}
@@ -54,9 +50,6 @@ func (rm *RoomManager) Add(room *Room) error {
 // Remove removes a room from the manager by its ID.
 // It stops the room and waits for it to finish processing before removing it.
 func (rm *RoomManager) Remove(roomID string) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
 	room, exists := rm.rooms.Get(roomID)
 	if !exists {
 		return
@@ -69,9 +62,6 @@ func (rm *RoomManager) Remove(roomID string) {
 
 // Get retrieves a room by its ID.
 func (rm *RoomManager) Get(roomID string) (*Room, bool) {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	room, exists := rm.rooms.Get(roomID)
 	if !exists {
 		return nil, false
@@ -82,17 +72,11 @@ func (rm *RoomManager) Get(roomID string) (*Room, bool) {
 
 // Check if the room exists in the manager.
 func (rm *RoomManager) Has(roomID string) bool {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	return rm.rooms.Has(roomID)
 }
 
 // Num returns the number of rooms managed by the RoomManager.
 func (rm *RoomManager) Num() int {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	return rm.rooms.Len()
 }
 
@@ -102,9 +86,6 @@ func (rm *RoomManager) Stop() {
 	if rm.closed.Swap(true) {
 		return
 	}
-
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
 
 	// Stop all rooms synchronously.
 	rm.rooms.Iterator(func(_ string, room *Room) bool {
@@ -127,9 +108,6 @@ func (rm *RoomManager) IsClosed() bool {
 // This function is not thread-safe, so it should be called with the room manager locked.
 // It is recommended to use this function for read-only operations on rooms.
 func (rm *RoomManager) Range(fn func(*Room)) {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	rm.rooms.Iterator(func(_ string, room *Room) bool {
 		fn(room)
 		return true
@@ -140,9 +118,6 @@ func (rm *RoomManager) Range(fn func(*Room)) {
 // Returns a map where the key is the room ID and the value is the number of players in that room.
 // This function is not thread-safe, so it should be called with the room manager locked.
 func (rm *RoomManager) RoomsPlayerNum() map[string]int {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	nums := make(map[string]int)
 	rm.rooms.Iterator(func(roomID string, room *Room) bool {
 		nums[room.ID()] = room.players.Len()
@@ -154,9 +129,6 @@ func (rm *RoomManager) RoomsPlayerNum() map[string]int {
 
 // Returns a slice of all rooms managed by the RoomManager.
 func (rm *RoomManager) Rooms() []*Room {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	rooms := make([]*Room, 0, rm.rooms.Len())
 	rm.rooms.Iterator(func(_ string, room *Room) bool {
 		rooms = append(rooms, room)
@@ -168,9 +140,6 @@ func (rm *RoomManager) Rooms() []*Room {
 
 // Get the players in the room
 func (rm *RoomManager) Players(roomId string) []string {
-	rm.mu.RLock()
-	defer rm.mu.RUnlock()
-
 	room, ok := rm.rooms.Get(roomId)
 	if !ok {
 		return nil

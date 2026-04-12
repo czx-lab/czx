@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/czx-lab/czx/container/cmap"
 	"github.com/czx-lab/czx/container/recycler"
@@ -40,9 +41,8 @@ type (
 		// and send messages to Kafka
 		// and receive messages from Kafka
 		loop frame.LoopFace
-		// running is used to check if the room is running
-		// and to prevent multiple calls to Run()
-		running bool
+		// running is used to indicate whether the room is running or not
+		running atomic.Bool
 		// players is used to keep track of the players in the room
 		// and to prevent multiple calls to Join()
 		players *cmap.CMap[string, struct{}]
@@ -110,39 +110,52 @@ func (r *Room) Data() any {
 // Message is used to send messages to the room
 // and receive messages from the room
 func (r *Room) WriteMessage(msg frame.Message) error {
-	if !r.running {
+	if !r.running.Load() {
 		// if the room is not running, drop the message
 		// and return an error
 		return ErrNotRunning
 	}
 
-	if r.loop == nil {
+	r.mu.RLock()
+	loop := r.loop
+	if loop == nil {
+		r.mu.RUnlock()
 		return ErrLoopNotFound
 	}
-	return r.loop.Write(msg)
+
+	r.mu.RUnlock()
+
+	return loop.Write(msg)
 }
 
 // Join is used to add a player to the room
 // and to prevent multiple calls to Join()
 func (r *Room) Join(playerID string) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	if r.players.Has(playerID) {
+		r.mu.Unlock()
 		return ErrMaxPlayer
 	}
 	if r.players.Len() >= r.opt.MaxPlayer {
+		r.mu.Unlock()
 		return ErrRoomFull
 	}
 
 	r.players.Set(playerID, struct{}{})
 
-	if r.processor == nil {
+	proc := r.processor
+	r.mu.Unlock()
+
+	if proc == nil {
 		return nil
 	}
 
-	if err := r.processor.Join(playerID); err != nil {
+	if err := proc.Join(playerID); err != nil {
+		r.mu.Lock()
 		r.players.Delete(playerID)
+		r.mu.Unlock()
+
 		// If the player is already in the room, remove it
 		return err
 	}
@@ -154,41 +167,42 @@ func (r *Room) Join(playerID string) error {
 // and to prevent multiple calls to Leave()
 func (r *Room) Leave(playerID string) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	r.players.Delete(playerID)
 	if r.processor == nil {
+		r.mu.Unlock()
 		return nil
 	}
 
-	return r.processor.Leave(playerID)
+	proc := r.processor
+	r.mu.Unlock()
+
+	return proc.Leave(playerID)
 }
 
 // Check if the room is running
 // Returns true if the room is running, false otherwise
 func (r *Room) Status() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.running
+	return r.running.Load()
 }
 
 // Start the room loop and process messages
 // in a separate goroutine. It will run until the loop is stopped or an error occurs.
 func (r *Room) Start() error {
 	// Remove the lock here to avoid potential deadlocks
-	r.mu.Lock()
-	if r.running {
-		r.mu.Unlock()
+	if r.running.Load() {
 		return ErrRunning
 	}
 
-	r.running = true
-	r.mu.Unlock()
+	r.running.Store(true)
+
+	r.mu.RLock()
+	loop := r.loop
+	r.mu.RUnlock()
 
 	// Start the loop without holding the lock
-	if r.loop != nil {
-		r.loop.Start(r.ctx)
+	if loop != nil {
+		loop.Start(r.ctx)
 	}
 
 	return nil
@@ -196,15 +210,18 @@ func (r *Room) Start() error {
 
 // stop the room loop and release resources
 func (r *Room) stop() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if !r.running {
+	if !r.running.Load() {
 		return
 	}
-	r.running = false
-	if r.processor != nil {
-		r.processor.Close()
+
+	r.running.Store(false)
+
+	r.mu.RLock()
+	proc := r.processor
+	r.mu.RUnlock()
+
+	if proc != nil {
+		proc.Close()
 	}
 }
 
@@ -222,8 +239,12 @@ func (r *Room) Stop() {
 	}
 
 	// Stop the loop synchronously to ensure proper cleanup.
-	if r.loop != nil {
-		r.loop.Stop()
+	r.mu.RLock()
+	loop := r.loop
+	r.mu.RUnlock()
+
+	if loop != nil {
+		loop.Stop()
 	}
 }
 
