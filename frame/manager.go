@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -13,19 +14,21 @@ var ErrLoopExists = errors.New("loop already exists")
 type LoopManager struct {
 	wg    sync.WaitGroup
 	mu    sync.RWMutex
-	loops *cmap.CMap[string, *Loop]
+	loops *cmap.CMap[string, LoopFace]
+	ctx   context.Context
 }
 
-func NewManager(r recycler.Recycler) *LoopManager {
-	lops := cmap.New[string, *Loop]()
+func NewManager(r recycler.Recycler, ctx context.Context) *LoopManager {
+	lops := cmap.New[string, LoopFace]()
 	return &LoopManager{
 		loops: lops.WithRecycler(r),
+		ctx:   ctx,
 	}
 }
 
 // Add adds a new loop to the manager.
 // It starts the loop in a separate goroutine.
-func (lm *LoopManager) Add(id string, loop *Loop) error {
+func (lm *LoopManager) Add(id string, loop LoopFace) error {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 
@@ -40,7 +43,7 @@ func (lm *LoopManager) Add(id string, loop *Loop) error {
 		defer lm.wg.Done()
 
 		// Start the loop
-		loop.Start()
+		loop.Start(lm.ctx)
 	}()
 
 	return nil
@@ -66,7 +69,7 @@ func (lm *LoopManager) Remove(id string) {
 
 // Get retrieves a loop by its ID.
 // It returns an error if the loop is not found.
-func (lm *LoopManager) Get(id string) *Loop {
+func (lm *LoopManager) Get(id string) LoopFace {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
@@ -80,12 +83,12 @@ func (lm *LoopManager) Get(id string) *Loop {
 
 // Loops returns a slice of all loops managed by the LoopManager.
 // It does not lock the manager, so it may return a snapshot of the loops at the time of the call.
-func (lm *LoopManager) Loops() []*Loop {
+func (lm *LoopManager) Loops() []LoopFace {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 
-	loops := make([]*Loop, 0, lm.loops.Len())
-	lm.loops.Iterator(func(_ string, loop *Loop) bool {
+	loops := make([]LoopFace, 0, lm.loops.Len())
+	lm.loops.Iterator(func(_ string, loop LoopFace) bool {
 		loops = append(loops, loop)
 		return true
 	})
@@ -118,7 +121,7 @@ func (lm *LoopManager) ALLID() []string {
 	defer lm.mu.RUnlock()
 
 	ids := make([]string, 0, lm.loops.Len())
-	lm.loops.Iterator(func(s string, _ *Loop) bool {
+	lm.loops.Iterator(func(s string, _ LoopFace) bool {
 		ids = append(ids, s)
 		return true
 	})
@@ -132,7 +135,7 @@ func (lm *LoopManager) Stop() {
 	defer lm.mu.Unlock()
 
 	// Stop all loops
-	lm.loops.Iterator(func(s string, l *Loop) bool {
+	lm.loops.Iterator(func(s string, l LoopFace) bool {
 		l.Stop()
 		return true
 	})

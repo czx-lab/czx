@@ -1,6 +1,7 @@
 package room
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -38,7 +39,7 @@ type (
 		// loop is used to run the room loop
 		// and send messages to Kafka
 		// and receive messages from Kafka
-		loop *frame.Loop
+		loop frame.LoopFace
 		// running is used to check if the room is running
 		// and to prevent multiple calls to Run()
 		running bool
@@ -50,23 +51,25 @@ type (
 		processor RoomProcessor
 		// data is used to store the room data
 		data any
+		ctx  context.Context
 	}
 )
 
-func NewRoom(opt RoomConf, r recycler.Recycler) *Room {
+func NewRoom(opt RoomConf, r recycler.Recycler, ctx context.Context) *Room {
 	defaultConf(&opt)
 
 	ps := cmap.New[string, struct{}]()
 	room := &Room{
 		opt:     opt,
 		players: ps.WithRecycler(r),
+		ctx:     ctx,
 	}
 
 	return room
 }
 
 // WithLoop is used to set the room loop
-func (r *Room) WithLoop(loop *frame.Loop) {
+func (r *Room) WithLoop(loop frame.LoopFace) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -185,7 +188,7 @@ func (r *Room) Start() error {
 
 	// Start the loop without holding the lock
 	if r.loop != nil {
-		r.loop.Start()
+		r.loop.Start(r.ctx)
 	}
 
 	return nil
