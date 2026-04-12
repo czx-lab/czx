@@ -4,6 +4,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,7 @@ type (
 		players   *cmap.Shareded[string, *Player]
 		closed    atomic.Bool
 		heartbeat *Heartbeat
+		mu        sync.RWMutex
 	}
 	// BroadcastMessage is a struct that represents a message to be broadcasted to players.
 	BroadcastMessage struct {
@@ -51,6 +53,9 @@ func NewPlayerManager(conf *ManagerConf, r recycler.Recycler) *PlayerManager {
 
 // WithHeartbeat sets the heartbeat manager for the player manager.
 func (p *PlayerManager) WithHeartbeat(hb *Heartbeat) *PlayerManager {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.heartbeat = hb
 	return p
 }
@@ -64,13 +69,17 @@ func (p *PlayerManager) Add(player *Player) error {
 
 	p.players.Set(player.ID(), player)
 
+	p.mu.RLock()
+	heartbeat := p.heartbeat
+	p.mu.RUnlock()
+
 	// Register the player with the heartbeat manager
-	if p.heartbeat != nil {
+	if heartbeat != nil {
 		if player.heartbeat == nil {
-			player.WithHeartbeat(p.heartbeat)
+			player.WithHeartbeat(heartbeat)
 		}
 
-		p.heartbeat.Register(player)
+		heartbeat.Register(player)
 	} else {
 		GlobalHeartbeat.Register(player)
 	}
@@ -104,8 +113,12 @@ func (p *PlayerManager) Start() {
 		p.conf.HeartbeatInterval = DefaultHeartbeatInterval
 	}
 
-	if p.heartbeat != nil {
-		p.heartbeat.Start(time.Duration(p.conf.HeartbeatInterval) * time.Second)
+	p.mu.RLock()
+	heartbeat := p.heartbeat
+	p.mu.RUnlock()
+
+	if heartbeat != nil {
+		heartbeat.Start(time.Duration(p.conf.HeartbeatInterval) * time.Second)
 		return
 	}
 
