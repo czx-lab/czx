@@ -3,6 +3,7 @@ package frame
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +27,7 @@ type (
 		done  chan struct{}
 		flag  atomic.Bool
 		once  sync.Once
+		wg    sync.WaitGroup
 	}
 )
 
@@ -76,6 +78,9 @@ func (f *FrameLoop) Start(ctx context.Context) error {
 	}
 
 	defer f.flag.Store(false)
+
+	f.wg.Add(1)
+	defer f.wg.Done()
 
 	frequency := time.Second / time.Duration(f.conf.Frequency)
 	ticker := time.NewTicker(frequency)
@@ -157,17 +162,43 @@ func (f *FrameLoop) exec() {
 
 // Stop implements [LoopFace].
 func (f *FrameLoop) Stop() {
-	f.once.Do(func() { close(f.done) })
+	f.once.Do(func() {
+		close(f.done)
 
+		// Wait for the loop to finish processing before stopping
+		f.wg.Wait()
+
+		f.stop()
+	})
+}
+
+// stop processes any remaining frames and calls the OnClose method of the processor.
+func (f *FrameLoop) stop() {
 	f.mu.RLock()
+	hasData := len(f.queue) > 0
 	proc := f.proc
 	f.mu.RUnlock()
+
+	if hasData {
+		f.exec()
+	}
 
 	if proc == nil {
 		return
 	}
 
 	proc.OnClose()
+}
+
+// Ids returns a copy of the current player IDs and their last processed frame IDs.
+func (f *FrameLoop) Ids() map[string]uint {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	idsCopy := make(map[string]uint, len(f.ids))
+	maps.Copy(idsCopy, f.ids)
+
+	return idsCopy
 }
 
 // AddPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
