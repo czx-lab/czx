@@ -118,6 +118,13 @@ func (f *FrameLoop) FrameId() uint64 {
 	return f.frameId
 }
 
+// ResetFrameId resets the current frame ID to the specified value.
+func (f *FrameLoop) ResetFrameId(id uint64) {
+	f.mu.Lock()
+	f.frameId = id
+	f.mu.Unlock()
+}
+
 // exec processes the current frame using the frame processor.
 func (f *FrameLoop) exec() {
 	f.mu.Lock()
