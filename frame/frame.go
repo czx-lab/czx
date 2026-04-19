@@ -118,10 +118,17 @@ func (f *FrameLoop) FrameId() uint64 {
 	return f.frameId
 }
 
-// ResetFrameId resets the current frame ID to the specified value.
-func (f *FrameLoop) ResetFrameId(id uint64) {
+// Reset resets the frame ID to a specific value, typically used for synchronization.
+func (f *FrameLoop) Reset(id uint64) {
 	f.mu.Lock()
 	f.frameId = id
+
+	for playerId := range f.ids {
+		f.ids[playerId] = uint(id)
+	}
+
+	f.queue = make(map[string][]Message)
+
 	f.mu.Unlock()
 }
 

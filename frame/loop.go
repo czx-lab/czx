@@ -29,8 +29,8 @@ type (
 		LoopFace
 		// FrameId returns the current frame ID.
 		FrameId() uint64
-		// ResetFrameId resets the frame ID to the specified value.
-		ResetFrameId(uint64)
+		// Reset resets the frame ID to a specific value, typically used for synchronization.
+		Reset(uint64)
 		// PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
 		PlayerIds() map[string]uint
 		// RegisterPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
