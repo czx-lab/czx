@@ -79,6 +79,14 @@ func (r *Room) WithLoop(loop frame.LoopFace) {
 	r.loop = loop
 }
 
+// Loop returns the room loop
+func (r *Room) Loop() frame.LoopFace {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.loop
+}
+
 // WithProcessor is used to set the room processor
 // and to prevent multiple calls to WithProcessor()
 func (r *Room) WithProcessor(proc RoomProcessor) {

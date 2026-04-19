@@ -213,4 +213,4 @@ func defaultNormalConf(conf *NormalConf) {
 	}
 }
 
-var _ LoopFace = (*Normal)(nil)
+var _ NormalFace = (*Normal)(nil)

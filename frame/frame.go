@@ -197,8 +197,8 @@ func (f *FrameLoop) stop() {
 	proc.OnClose()
 }
 
-// Ids returns a copy of the current player IDs and their last processed frame IDs.
-func (f *FrameLoop) Ids() map[string]uint {
+// PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
+func (f *FrameLoop) PlayerIds() map[string]uint {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
@@ -208,8 +208,8 @@ func (f *FrameLoop) Ids() map[string]uint {
 	return idsCopy
 }
 
-// AddPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
-func (f *FrameLoop) AddPlayer(playerId string) {
+// RegisterPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
+func (f *FrameLoop) RegisterPlayer(playerId string) {
 	f.mu.Lock()
 
 	lastFrameId, ok := f.ids[playerId]
@@ -279,4 +279,4 @@ func defaultFrameConf(conf *FrameConf) {
 	}
 }
 
-var _ LoopFace = (*FrameLoop)(nil)
+var _ FrameFace = (*FrameLoop)(nil)
