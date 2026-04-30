@@ -9,6 +9,10 @@ const (
 	// game logic frame processing frequency
 	frequency uint = 30
 	queueCap  int  = 100 // Capacity of the normal message queue
+
+	// Loop state flags
+	flagStarted uint32 = iota + 1
+	flagPaused
 )
 
 type (
@@ -22,6 +26,10 @@ type (
 		Write(Message) error
 		// Frequency sets the processing frequency of the loop.
 		Frequency(uint) error
+		// Pause pauses the loop, preventing it from processing messages until resumed.
+		Pause() bool
+		// Resume resumes the loop if it is paused, allowing it to continue processing messages.
+		Resume() bool
 	}
 
 	// FrameFace defines the interface for a game frame, which includes a loop.

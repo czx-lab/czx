@@ -25,7 +25,7 @@ type (
 		queue map[string][]Message
 		ids   map[string]uint // Last processed frame ID for each player
 		done  chan struct{}
-		flag  atomic.Bool
+		flag  atomic.Uint32
 		once  sync.Once
 		wg    sync.WaitGroup
 	}
@@ -73,11 +73,11 @@ func (f *FrameLoop) WithProc(proc FrameProcessor) *FrameLoop {
 // Start implements [LoopFace].
 func (f *FrameLoop) Start(ctx context.Context) error {
 	// Ensure that the loop can only be started once
-	if !f.flag.CompareAndSwap(false, true) {
+	if !f.flag.CompareAndSwap(0, flagStarted) {
 		return errors.New("loop already started")
 	}
 
-	defer f.flag.Store(false)
+	defer f.flag.Store(0)
 
 	f.wg.Add(1)
 	defer f.wg.Done()
@@ -100,6 +100,11 @@ func (f *FrameLoop) Start(ctx context.Context) error {
 		case <-f.done:
 			return nil
 		case <-ticker.C:
+			// Only execute the frame processing if the loop is not paused
+			if f.flag.Load() == flagPaused {
+				continue
+			}
+
 			f.exec()
 		case <-f.adjust:
 			f.mu.RLock()
@@ -156,7 +161,7 @@ func (f *FrameLoop) exec() {
 		emptyMessage := []Message{
 			{
 				PlayerID:  playerId,
-				FrameID:   int(f.frameId),
+				FrameID:   f.frameId,
 				Timestamp: time.Now(),
 			},
 		}
@@ -202,6 +207,16 @@ func (f *FrameLoop) stop() {
 	}
 
 	proc.OnClose()
+}
+
+// Pause implements [FrameFace].
+func (f *FrameLoop) Pause() bool {
+	return f.flag.CompareAndSwap(flagStarted, flagPaused)
+}
+
+// Resume implements [FrameFace].
+func (f *FrameLoop) Resume() bool {
+	return f.flag.CompareAndSwap(flagPaused, flagStarted)
 }
 
 // PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
@@ -265,13 +280,13 @@ func (f *FrameLoop) Write(in Message) error {
 
 	// Check for stale messages
 	if existing, ok := f.queue[in.PlayerID]; ok && len(existing) > 0 {
-		if existing[len(existing)-1].FrameID > in.FrameID {
+		if existing[len(existing)-1].FrameID >= in.FrameID {
 			return errors.New("stale or duplicate message")
 		}
 	}
 
 	// Only accept messages for current or future frames
-	if in.FrameID <= int(f.frameId) {
+	if in.FrameID <= f.frameId {
 		return errors.New("message for past frame")
 	}
 

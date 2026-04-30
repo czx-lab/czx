@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type (
 		proc   NormalProcessor
 		done   chan struct{}
 		once   sync.Once
+		flag   atomic.Uint32
 		wg     sync.WaitGroup
 	}
 )
@@ -50,11 +52,18 @@ func (n *Normal) WithProc(proc NormalProcessor) *Normal {
 
 // Start implements [LoopFace].
 func (n *Normal) Start(ctx context.Context) error {
+	if !n.flag.CompareAndSwap(0, flagStarted) {
+		return errors.New("loop already started")
+	}
+
+	defer n.flag.Store(0)
+
 	n.mu.RLock()
 	if n.proc == nil {
 		n.mu.RUnlock()
 		return errors.New("processor is not set")
 	}
+
 	n.mu.RUnlock()
 
 	n.wg.Add(1)
@@ -71,6 +80,10 @@ func (n *Normal) Start(ctx context.Context) error {
 		case <-n.done:
 			return nil
 		case <-ticker.C:
+			if n.flag.Load() == flagPaused {
+				continue
+			}
+
 			n.exec()
 		case <-n.adjust:
 			n.mu.RLock()
@@ -139,6 +152,16 @@ func (n *Normal) Stop() {
 
 		proc.OnClose()
 	})
+}
+
+// Pause implements [NormalFace].
+func (n *Normal) Pause() bool {
+	return n.flag.CompareAndSwap(flagStarted, flagPaused)
+}
+
+// Resume implements [NormalFace].
+func (n *Normal) Resume() bool {
+	return n.flag.CompareAndSwap(flagPaused, flagStarted)
 }
 
 // Write implements [LoopFace].

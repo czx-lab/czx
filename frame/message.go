@@ -11,7 +11,7 @@ type (
 		PlayerID  string
 		Data      []byte
 		Timestamp time.Time
-		FrameID   int // Sequence ID for the message
+		FrameID   uint64 // Sequence ID for the message
 	}
 
 	// Frame represents a single frame of game state
