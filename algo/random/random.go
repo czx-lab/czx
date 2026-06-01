@@ -43,7 +43,7 @@ func NewWeightPool[T any, WT INumber](items []WeightItem[T, WT]) *WeightPool[T, 
 		items:      items,
 		total:      total,
 		prefixSums: prefixSums,
-		rng:        rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), k)),
+		rng:        rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), K)),
 	}
 }
 
