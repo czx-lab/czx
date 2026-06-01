@@ -2,6 +2,7 @@ package cqueue
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"testing"
@@ -79,12 +80,14 @@ func TestQueueMemStats(t *testing.T) {
 	q := NewQueue[*Data](0).WithRecycler(&Recycler{})
 	count := 10000000
 
+	seed := uint64(time.Now().UnixNano())
+
 	var num int
 	go func() {
 		for {
 			time.Sleep(time.Second)
 			num++
-			pnum := random.RangeRandom(200000, 300000)
+			pnum := random.Range(rand.New(rand.NewPCG(seed, seed)), 200000, 300000)
 			// if rand.Float64() < 0.01 {
 			// 	pnum = q.Len()
 			// }
@@ -95,7 +98,7 @@ func TestQueueMemStats(t *testing.T) {
 			runtime.ReadMemStats(&m)
 			fmt.Printf("After Pop: Alloc = %v MB, Len = %d\n", m.Alloc/(1024*1024), q.Len())
 
-			_num := random.RangeRandom(100000, 200000)
+			_num := random.Range(rand.New(rand.NewPCG(seed, seed)), 100000, 200000)
 			if num%10 == 0 {
 				for i := 0; i < _num; i++ {
 					q.Push(&Data{ID: i}) // Push a dummy value to trigger memory allocation
