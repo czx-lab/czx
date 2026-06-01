@@ -7,7 +7,7 @@ import (
 )
 
 // proportionality factor
-const k = 0x9e3779b97f4a7c13
+const K = 0x9e3779b97f4a7c13
 
 type (
 	// Define the types that can be used with RangeRandom
