@@ -92,5 +92,7 @@ func main() {
 	}()
 
 	fmt.Printf("Starting websocket server at %s...\n", gateConf.WsServerConf.Addr)
-	gateway.Start()
+	if err := gateway.Start(); err != nil {
+		panic(err)
+	}
 }
