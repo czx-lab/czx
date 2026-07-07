@@ -1,6 +1,6 @@
 module github.com/czx-lab/czx
 
-go 1.24.2
+go 1.25.0
 
 // The following versions have been retracted due to compatibility issues or critical bugs. Do not use them.
 retract v1.0.1-v1.11.2
@@ -38,8 +38,8 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 )
