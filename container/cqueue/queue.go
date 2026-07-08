@@ -26,6 +26,12 @@ func NewQueue[T any](maxcap int) *Queue[T] {
 	q := &Queue[T]{
 		maxCapacity: maxcap,
 	}
+
+	// Preallocate the slice with the specified maximum capacity
+	if maxcap > 0 {
+		q.queue = make([]T, 0, maxcap)
+	}
+
 	q.cond = sync.NewCond(&q.mu)
 	return q
 }
@@ -247,6 +253,12 @@ func (q *Queue[T]) Clear() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	if q.maxCapacity > 0 {
+		q.queue = q.queue[:0] // Reset the slice while keeping the allocated capacity
+		return
+	}
+
+	// If there's no max capacity, we can set the queue to nil to free memory
 	q.queue = nil
 }
 
