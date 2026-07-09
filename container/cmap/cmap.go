@@ -196,6 +196,6 @@ func (c *CMap[K, V]) Clear() {
 	defer c.mu.Unlock()
 
 	// Clear the map
-	c.data = make(map[K]V)
+	clear(c.data)
 	c.maxLen = 0
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
+	"sync/atomic"
 
 	"github.com/czx-lab/czx/container/recycler"
 )
@@ -20,6 +21,7 @@ type (
 	Shareded[K comparable, V any] struct {
 		shards []*CMap[K, V] // Array of shards
 		opt    Option[K]
+		count  atomic.Int64 // Total number of key-value pairs across all shards
 	}
 )
 
@@ -76,6 +78,7 @@ func (s *Shareded[K, V]) Get(key K) (V, bool) {
 func (s *Shareded[K, V]) Delete(key K) {
 	shard := s.shard(key)
 	shard.Delete(key)
+	s.count.Add(-1)
 }
 
 // Shrink reduces the memory usage of all shards.
@@ -89,6 +92,7 @@ func (s *Shareded[K, V]) Shrink() {
 func (s *Shareded[K, V]) Set(key K, value V) {
 	shard := s.shard(key)
 	shard.Set(key, value)
+	s.count.Add(1)
 }
 
 // Iterator iterates over all key-value pairs in the map.
@@ -117,11 +121,7 @@ func (s *Shareded[K, V]) Keys() []K {
 
 // Len returns the total number of key-value pairs in the map.
 func (s *Shareded[K, V]) Len() int {
-	total := 0
-	for _, shard := range s.shards {
-		total += shard.Len()
-	}
-	return total
+	return int(s.count.Load())
 }
 
 // Clear removes all key-value pairs from the map.
@@ -129,4 +129,6 @@ func (s *Shareded[K, V]) Clear() {
 	for _, shard := range s.shards {
 		shard.Clear()
 	}
+
+	s.count.Store(0)
 }
