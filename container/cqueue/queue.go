@@ -73,7 +73,7 @@ func (q *Queue[T]) DeleteFunc(fn func(T) bool) bool {
 }
 
 func (q *Queue[T]) shrink() {
-	if q.recycler == nil {
+	if q.recycler == nil || cap(q.queue) <= q.maxCapacity {
 		return
 	}
 
@@ -116,7 +116,7 @@ func (q *Queue[T]) Push(data ...T) error {
 		return fmt.Errorf("queue is closed")
 	}
 
-	if q.maxCapacity > 0 && len(q.queue) >= q.maxCapacity {
+	if q.maxCapacity > 0 && len(q.queue)+len(data) > q.maxCapacity {
 		return fmt.Errorf("queue is full, max capacity: %d", q.maxCapacity)
 	}
 
@@ -140,7 +140,6 @@ func (q *Queue[T]) Pop() (T, bool) {
 	defer q.mu.Unlock()
 
 	if len(q.queue) == 0 {
-		q.queue = nil
 		var zero T
 		return zero, false
 	}
@@ -149,7 +148,7 @@ func (q *Queue[T]) Pop() (T, bool) {
 	q.queue = q.queue[1:]
 
 	if len(q.queue) == 0 {
-		q.queue = nil // Clear the queue if it becomes empty
+		q.clear()
 		return data, true
 	}
 
@@ -162,15 +161,11 @@ func (q *Queue[T]) WaitPop() (T, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.closed {
-		var zero T
-		return zero, false
-	}
-
 	for len(q.queue) == 0 && !q.closed {
 		q.cond.Wait()
 	}
-	if q.closed {
+
+	if len(q.queue) == 0 {
 		var zero T
 		return zero, false
 	}
@@ -178,8 +173,13 @@ func (q *Queue[T]) WaitPop() (T, bool) {
 	data := q.queue[0]
 	q.queue = q.queue[1:]
 
+	if len(q.queue) > 0 {
+		q.cond.Signal()
+	}
+
 	if len(q.queue) == 0 {
-		q.queue = nil // Clear the queue if it becomes empty
+		q.clear()
+		return data, true
 	}
 
 	q.shrink()
@@ -227,7 +227,6 @@ func (q *Queue[T]) PopBatch(n int) ([]T, bool) {
 	defer q.mu.Unlock()
 
 	if len(q.queue) == 0 {
-		q.queue = nil
 		return nil, false
 	}
 
@@ -239,7 +238,7 @@ func (q *Queue[T]) PopBatch(n int) ([]T, bool) {
 	q.queue = q.queue[n:]
 
 	if len(q.queue) == 0 {
-		q.queue = nil // Clear the queue if it becomes empty
+		q.clear()
 		return data, true
 	}
 
@@ -253,6 +252,11 @@ func (q *Queue[T]) Clear() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	q.clear()
+}
+
+// clear is an internal method that clears the queue without locking.
+func (q *Queue[T]) clear() {
 	if q.maxCapacity > 0 {
 		q.queue = q.queue[:0] // Reset the slice while keeping the allocated capacity
 		return
@@ -269,7 +273,7 @@ func (q *Queue[T]) Shrink() {
 	defer q.mu.Unlock()
 
 	if len(q.queue) == 0 {
-		q.queue = nil
+		q.clear()
 		return
 	}
 
