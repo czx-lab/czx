@@ -59,6 +59,7 @@ func (q *qitems[T]) Pop() any {
 	n := len(oqitem)
 	item := oqitem[n-1]
 	item.index = -1 // for safety
+	oqitem[n-1] = nil
 	*q = oqitem[0 : n-1]
 	return item
 }
