@@ -145,6 +145,8 @@ func (q *Queue[T]) Pop() (T, bool) {
 	}
 
 	data := q.queue[0]
+	var zero T
+	q.queue[0] = zero
 	q.queue = q.queue[1:]
 
 	if len(q.queue) == 0 {
@@ -171,6 +173,8 @@ func (q *Queue[T]) WaitPop() (T, bool) {
 	}
 
 	data := q.queue[0]
+	var zero T
+	q.queue[0] = zero
 	q.queue = q.queue[1:]
 
 	if len(q.queue) > 0 {
@@ -234,7 +238,8 @@ func (q *Queue[T]) PopBatch(n int) ([]T, bool) {
 		n = len(q.queue)
 	}
 
-	data := q.queue[:n]
+	data := append([]T(nil), q.queue[:n]...) // Create a copy of the elements to return
+	clear(q.queue[:n])                       // Clear the references to the popped elements
 	q.queue = q.queue[n:]
 
 	if len(q.queue) == 0 {
@@ -258,6 +263,7 @@ func (q *Queue[T]) Clear() {
 // clear is an internal method that clears the queue without locking.
 func (q *Queue[T]) clear() {
 	if q.maxCapacity > 0 {
+		clear(q.queue)        // Clear the references to the elements
 		q.queue = q.queue[:0] // Reset the slice while keeping the allocated capacity
 		return
 	}
