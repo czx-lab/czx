@@ -221,6 +221,7 @@ func (pq *PriorityQueue[T]) Clear() {
 	pq.mu.Lock()
 	defer pq.mu.Unlock()
 
+	clear(pq.items)
 	pq.items = pq.items[:0]
 	pq.shrink()
 }
