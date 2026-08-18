@@ -39,11 +39,14 @@ type (
 		FrameId() uint64
 		// Reset resets the frame ID to a specific value, typically used for synchronization.
 		Reset(uint64)
-		// PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
+		// PlayerIds returns a copy of the current player IDs and the last frame
+		// each player has real input for (their resend sync point on reconnect).
 		PlayerIds() map[string]uint64
-		// RegisterPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
+		// RegisterPlayer registers a new player, or resends frames missed by a
+		// reconnecting player starting from their sync point.
 		RegisterPlayer(string)
-		// DeletePlayer unregisters a player from the frame loop and removes their input queue.
+		// DeletePlayer unregisters a player from the frame loop and removes their
+		// input queue. Use only for players permanently leaving the room.
 		DeletePlayer(string)
 	}
 

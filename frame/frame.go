@@ -24,7 +24,10 @@ type (
 
 		// Queue of messages for each frame, indexed by frame ID and player ID
 		queue map[uint64]map[string]Message
-		ids   map[string]uint64 // Last processed frame ID for each player
+		// synced stores the last frame each player has real input for.
+		// Empty inputs filled in for missing messages do not advance it;
+		// it marks the resend start point when a player reconnects.
+		synced map[string]uint64
 		done  chan struct{}
 		flag  atomic.Uint32
 		once  sync.Once
@@ -39,7 +42,7 @@ func NewFrameLoop(conf FrameConf) *FrameLoop {
 		conf:   conf,
 		adjust: make(chan struct{}, 1), // Add buffer to avoid blocking
 		queue:  make(map[uint64]map[string]Message),
-		ids:    make(map[string]uint64),
+		synced: make(map[string]uint64),
 		done:   make(chan struct{}),
 	}
 }
@@ -129,8 +132,8 @@ func (f *FrameLoop) Reset(id uint64) {
 	f.mu.Lock()
 	f.frameId = id
 
-	for playerId := range f.ids {
-		f.ids[playerId] = id
+	for playerId := range f.synced {
+		f.synced[playerId] = id
 	}
 
 	f.queue = make(map[uint64]map[string]Message)
@@ -143,6 +146,12 @@ func (f *FrameLoop) exec() {
 	f.mu.Lock()
 	f.frameId++
 
+	// handling uint64 underflow when frameId is less than InputDelay
+	if f.frameId < uint64(f.conf.InputDelay) {
+		f.mu.Unlock()
+		return
+	}
+
 	// Determine the target frame to process based on the input delay
 	targetFrame := f.frameId - uint64(f.conf.InputDelay)
 	if targetFrame <= 0 {
@@ -152,19 +161,19 @@ func (f *FrameLoop) exec() {
 
 	inputs := f.queue[targetFrame]
 
-	// Create a new frame with the current frame ID
+	// Create a new frame for the target frame
 	frame := Frame{
 		FrameID: targetFrame,
 		Inputs:  make(map[string]Message),
 	}
 
 	// Process inputs for all registered players
-	for playerId := range f.ids {
+	for playerId := range f.synced {
 		if input, ok := inputs[playerId]; ok {
 			// Player has input for this frame
 			frame.Inputs[playerId] = input
-			// Update the last processed frame ID for the player
-			f.ids[playerId] = targetFrame
+			// Advance the player's sync point to the target frame
+			f.synced[playerId] = targetFrame
 			continue
 		}
 
@@ -226,25 +235,29 @@ func (f *FrameLoop) Resume() bool {
 	return f.flag.CompareAndSwap(flagPaused, flagStarted)
 }
 
-// PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
+// PlayerIds returns a copy of the current player IDs and the last frame each
+// player has real input for. Empty inputs filled in for missing messages do
+// not advance this value; it marks the resend start point when a player
+// reconnects.
 func (f *FrameLoop) PlayerIds() map[string]uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	idsCopy := make(map[string]uint64, len(f.ids))
-	maps.Copy(idsCopy, f.ids)
+	syncedCopy := make(map[string]uint64, len(f.synced))
+	maps.Copy(syncedCopy, f.synced)
 
-	return idsCopy
+	return syncedCopy
 }
 
-// RegisterPlayer registers a new player to the frame loop and resends the last processed frame if necessary.
+// RegisterPlayer registers a new player to the frame loop, or resends frames
+// missed by a reconnecting player starting from their sync point.
 func (f *FrameLoop) RegisterPlayer(playerId string) {
 	f.mu.Lock()
 
-	lastFrameId, ok := f.ids[playerId]
+	lastFrameId, ok := f.synced[playerId]
 	if !ok {
-		// Initialize the last processed frame ID for the player
-		f.ids[playerId] = f.frameId
+		// New player: initialize the sync point to the current frame
+		f.synced[playerId] = f.frameId
 		f.mu.Unlock()
 		return
 	}
@@ -256,16 +269,19 @@ func (f *FrameLoop) RegisterPlayer(playerId string) {
 		return
 	}
 
-	// Resend the last processed frame to the player
+	// Resend frames from the player's sync point to catch them up
 	proc.Resend(playerId, int(lastFrameId))
 }
 
 // DeletePlayer unregisters a player from the frame loop and removes their input queue.
+// NOTE: use only for players permanently leaving the room. Disconnected players
+// must stay registered so that reconnecting via RegisterPlayer can resend
+// missed frames from their sync point; deleting the entry disables that.
 func (f *FrameLoop) DeletePlayer(playerId string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	delete(f.ids, playerId)
+	delete(f.synced, playerId)
 
 	// Remove the player's input from all frames in the queue
 	for frameId := range f.queue {
@@ -285,7 +301,7 @@ func (f *FrameLoop) Write(in Message) error {
 	}
 
 	// Check if player is registered
-	if _, exists := f.ids[in.PlayerID]; !exists {
+	if _, exists := f.synced[in.PlayerID]; !exists {
 		return errors.New("player not registered")
 	}
 
