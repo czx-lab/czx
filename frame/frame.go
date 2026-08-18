@@ -11,7 +11,8 @@ import (
 
 type (
 	FrameConf struct {
-		Frequency uint // Frequency of game logic frame processing (in Hz)
+		Frequency  uint // Frequency of game logic frame processing (in Hz)
+		InputDelay uint // frames to delay input execution
 	}
 	FrameLoop struct {
 		conf   FrameConf
@@ -21,9 +22,9 @@ type (
 
 		frameId uint64 // Current frame ID
 
-		// Input queue for each player
-		queue map[string][]Message
-		ids   map[string]uint // Last processed frame ID for each player
+		// Queue of messages for each frame, indexed by frame ID and player ID
+		queue map[uint64]map[string]Message
+		ids   map[string]uint64 // Last processed frame ID for each player
 		done  chan struct{}
 		flag  atomic.Uint32
 		once  sync.Once
@@ -37,8 +38,8 @@ func NewFrameLoop(conf FrameConf) *FrameLoop {
 	return &FrameLoop{
 		conf:   conf,
 		adjust: make(chan struct{}, 1), // Add buffer to avoid blocking
-		queue:  make(map[string][]Message),
-		ids:    make(map[string]uint),
+		queue:  make(map[uint64]map[string]Message),
+		ids:    make(map[string]uint64),
 		done:   make(chan struct{}),
 	}
 }
@@ -129,10 +130,10 @@ func (f *FrameLoop) Reset(id uint64) {
 	f.frameId = id
 
 	for playerId := range f.ids {
-		f.ids[playerId] = uint(id)
+		f.ids[playerId] = id
 	}
 
-	f.queue = make(map[string][]Message)
+	f.queue = make(map[uint64]map[string]Message)
 
 	f.mu.Unlock()
 }
@@ -142,34 +143,40 @@ func (f *FrameLoop) exec() {
 	f.mu.Lock()
 	f.frameId++
 
+	// Determine the target frame to process based on the input delay
+	targetFrame := f.frameId - uint64(f.conf.InputDelay)
+	if targetFrame <= 0 {
+		f.mu.Unlock()
+		return
+	}
+
+	inputs := f.queue[targetFrame]
+
 	// Create a new frame with the current frame ID
 	frame := Frame{
-		FrameID: f.frameId,
-		Inputs:  make(map[string][]Message),
+		FrameID: targetFrame,
+		Inputs:  make(map[string]Message),
 	}
 
 	// Process inputs for all registered players
 	for playerId := range f.ids {
-		if input, ok := f.queue[playerId]; ok {
+		if input, ok := inputs[playerId]; ok {
 			// Player has input for this frame
 			frame.Inputs[playerId] = input
 			// Update the last processed frame ID for the player
-			f.ids[playerId] = uint(input[len(input)-1].FrameID)
+			f.ids[playerId] = targetFrame
 			continue
 		}
+
 		// If no input from the player, create an empty message
-		emptyMessage := []Message{
-			{
-				PlayerID:  playerId,
-				FrameID:   f.frameId,
-				Timestamp: time.Now(),
-			},
+		emptyMessage := Message{
+			PlayerID: playerId, FrameID: targetFrame, Timestamp: time.Now(),
 		}
 		frame.Inputs[playerId] = emptyMessage
 	}
 
-	// Clear the frame queue for the next frame
-	f.queue = make(map[string][]Message)
+	// Remove the processed frame from the queue
+	delete(f.queue, targetFrame)
 
 	proc := f.proc
 	f.mu.Unlock()
@@ -220,11 +227,11 @@ func (f *FrameLoop) Resume() bool {
 }
 
 // PlayerIds returns a copy of the current player IDs and their last processed frame IDs.
-func (f *FrameLoop) PlayerIds() map[string]uint {
+func (f *FrameLoop) PlayerIds() map[string]uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	idsCopy := make(map[string]uint, len(f.ids))
+	idsCopy := make(map[string]uint64, len(f.ids))
 	maps.Copy(idsCopy, f.ids)
 
 	return idsCopy
@@ -237,7 +244,7 @@ func (f *FrameLoop) RegisterPlayer(playerId string) {
 	lastFrameId, ok := f.ids[playerId]
 	if !ok {
 		// Initialize the last processed frame ID for the player
-		f.ids[playerId] = uint(f.frameId)
+		f.ids[playerId] = f.frameId
 		f.mu.Unlock()
 		return
 	}
@@ -259,7 +266,11 @@ func (f *FrameLoop) DeletePlayer(playerId string) {
 	defer f.mu.Unlock()
 
 	delete(f.ids, playerId)
-	delete(f.queue, playerId)
+
+	// Remove the player's input from all frames in the queue
+	for frameId := range f.queue {
+		delete(f.queue[frameId], playerId)
+	}
 }
 
 // Write implements [LoopFace].
@@ -278,10 +289,10 @@ func (f *FrameLoop) Write(in Message) error {
 		return errors.New("player not registered")
 	}
 
-	// Check for stale messages
-	if existing, ok := f.queue[in.PlayerID]; ok && len(existing) > 0 {
-		if existing[len(existing)-1].FrameID >= in.FrameID {
-			return errors.New("stale or duplicate message")
+	// Check for duplicate messages for the same frame and player
+	if frameInputs, ok := f.queue[in.FrameID]; ok {
+		if _, ok := frameInputs[in.PlayerID]; ok {
+			return errors.New("duplicate message for frame")
 		}
 	}
 
@@ -290,7 +301,11 @@ func (f *FrameLoop) Write(in Message) error {
 		return errors.New("message for past frame")
 	}
 
-	f.queue[in.PlayerID] = append(f.queue[in.PlayerID], in)
+	if f.queue[in.FrameID] == nil {
+		f.queue[in.FrameID] = make(map[string]Message)
+	}
+
+	f.queue[in.FrameID][in.PlayerID] = in
 
 	return nil
 }
@@ -298,6 +313,10 @@ func (f *FrameLoop) Write(in Message) error {
 func defaultFrameConf(conf *FrameConf) {
 	if conf.Frequency == 0 {
 		conf.Frequency = frequency
+	}
+
+	if conf.InputDelay == 0 {
+		conf.InputDelay = 2
 	}
 }
 
