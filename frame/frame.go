@@ -33,7 +33,8 @@ type (
 		queue map[uint64]map[string]Message
 		// synced stores the last frame each player has real input for.
 		// Empty inputs filled in for missing messages do not advance it;
-		// it marks the resend start point when a player reconnects.
+		// it reflects input presence, not broadcast delivery, and is not
+		// the reconnection anchor.
 		synced map[string]uint64
 		done   chan struct{}
 		flag   atomic.Uint32
@@ -251,8 +252,8 @@ func (f *FrameLoop) Resume() bool {
 
 // PlayerIds returns a copy of the current player IDs and the last frame each
 // player has real input for. Empty inputs filled in for missing messages do
-// not advance this value; it marks the resend start point when a player
-// reconnects.
+// not advance this value; it reflects input presence, not broadcast
+// delivery, and is not the reconnection anchor.
 func (f *FrameLoop) PlayerIds() map[string]uint64 {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
@@ -263,13 +264,16 @@ func (f *FrameLoop) PlayerIds() map[string]uint64 {
 	return syncedCopy
 }
 
-// RegisterPlayer registers a new player to the frame loop, or resends frames
-// missed by a reconnecting player starting from their sync point.
-func (f *FrameLoop) RegisterPlayer(playerId string) {
+// RegisterPlayer registers a new player to the frame loop, or catches a
+// reconnecting player back up. lastApplied is the last frame the client had
+// applied when its connection dropped (0 for a first join): the processor
+// replays broadcasts after it, or sends a state snapshot first when the gap
+// is too large to replay. The anchor comes from the client because the
+// server cannot know which broadcasts a dropped connection delivered.
+func (f *FrameLoop) RegisterPlayer(playerId string, lastApplied uint64) {
 	f.mu.Lock()
 
-	lastFrameId, ok := f.synced[playerId]
-	if !ok {
+	if _, ok := f.synced[playerId]; !ok {
 		// New player: initialize the sync point to the current frame
 		f.synced[playerId] = f.frameId
 		f.mu.Unlock()
@@ -283,8 +287,8 @@ func (f *FrameLoop) RegisterPlayer(playerId string) {
 		return
 	}
 
-	// Resend frames from the player's sync point to catch them up
-	proc.Resend(playerId, int(lastFrameId))
+	// Catch the client up from its own reported baseline.
+	proc.CatchUp(playerId, lastApplied)
 }
 
 // DeletePlayer unregisters a player from the frame loop and removes their input queue.

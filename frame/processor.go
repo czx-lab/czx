@@ -12,9 +12,11 @@ type (
 		Processor
 		// Process processes the input frame.
 		Process(frame Frame)
-		// Resend re-sends the input message to the player.
-		// It should be called when the input message is not received by the player.
-		Resend(playerId string, frameId int)
+		// CatchUp brings a reconnecting player's client back to the current
+		// frame. fromFrame is the last frame that client had applied; the
+		// processor replays retained broadcasts after it, or sends a state
+		// snapshot first when the gap is too large to replay.
+		CatchUp(playerId string, fromFrame uint64)
 	}
 	// NormalProcessor is an interface for processing normal messages.
 	// It is responsible for processing the input message.

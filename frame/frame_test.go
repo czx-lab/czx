@@ -4,15 +4,24 @@ import (
 	"testing"
 )
 
-// recorder is a FrameProcessor that records executed frames and closes.
-type recorder struct {
-	frames []uint64
-	closed int
+type catchup struct {
+	playerId  string
+	fromFrame uint64
 }
 
-func (r *recorder) Process(frame Frame)                 { r.frames = append(r.frames, frame.FrameID) }
-func (r *recorder) Resend(playerId string, frameId int) {}
-func (r *recorder) OnClose()                            { r.closed++ }
+// recorder is a FrameProcessor that records executed frames, catch-ups and
+// closes.
+type recorder struct {
+	frames   []uint64
+	catchups []catchup
+	closed   int
+}
+
+func (r *recorder) Process(frame Frame) { r.frames = append(r.frames, frame.FrameID) }
+func (r *recorder) CatchUp(playerId string, fromFrame uint64) {
+	r.catchups = append(r.catchups, catchup{playerId, fromFrame})
+}
+func (r *recorder) OnClose() { r.closed++ }
 
 // newTestLoop returns a loop with two players, driven manually through
 // exec() — no ticker, fully deterministic.
@@ -21,8 +30,8 @@ func newTestLoop(t *testing.T, delay uint) (*FrameLoop, *recorder) {
 
 	rec := &recorder{}
 	loop := NewFrameLoop(FrameConf{Frequency: 10, InputDelay: delay}).WithProc(rec)
-	loop.RegisterPlayer("p1")
-	loop.RegisterPlayer("p2")
+	loop.RegisterPlayer("p1", 0)
+	loop.RegisterPlayer("p2", 0)
 
 	return loop, rec
 }
@@ -117,5 +126,27 @@ func TestStopDropsFutureFrames(t *testing.T) {
 	}
 	if rec.closed != 1 {
 		t.Fatalf("expected OnClose once, got %d", rec.closed)
+	}
+}
+
+func TestReconnectCatchesUpFromClientBaseline(t *testing.T) {
+	loop, rec := newTestLoop(t, 2)
+
+	for i := 0; i < 10; i++ {
+		loop.exec()
+	}
+
+	// The client reconnects reporting it had applied through frame 5: the
+	// anchor must be the client's baseline, not a server-side guess.
+	loop.RegisterPlayer("p1", 5)
+
+	if len(rec.catchups) != 1 || rec.catchups[0] != (catchup{"p1", 5}) {
+		t.Fatalf("expected catch-up from client baseline 5, got %v", rec.catchups)
+	}
+
+	// A first join must not trigger catch-up.
+	loop.RegisterPlayer("p3", 0)
+	if len(rec.catchups) != 1 {
+		t.Fatalf("expected no catch-up on first join, got %v", rec.catchups)
 	}
 }

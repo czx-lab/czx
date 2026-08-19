@@ -42,9 +42,9 @@ type (
 		// PlayerIds returns a copy of the current player IDs and the last frame
 		// each player has real input for (their resend sync point on reconnect).
 		PlayerIds() map[string]uint64
-		// RegisterPlayer registers a new player, or resends frames missed by a
-		// reconnecting player starting from their sync point.
-		RegisterPlayer(string)
+		// RegisterPlayer registers a new player, or catches a reconnecting
+		// player up from lastApplied, the last frame their client had applied.
+		RegisterPlayer(playerId string, lastApplied uint64)
 		// DeletePlayer unregisters a player from the frame loop and removes their
 		// input queue. Use only for players permanently leaving the room.
 		DeletePlayer(string)
