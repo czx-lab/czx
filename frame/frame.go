@@ -14,7 +14,6 @@ type (
 		Frequency       uint // Frequency of game logic frame processing (in Hz)
 		InputDelay      uint // frames to delay input execution
 		MaxFutureFrames uint // max frames a message may target in the future
-		DelayChangeLead uint // frames of lead time before a coordinated input-delay change takes effect
 	}
 	FrameLoop struct {
 		conf   FrameConf
@@ -24,11 +23,11 @@ type (
 
 		frameId uint64 // Current frame ID
 
-		// pendingDelay/pendingFrame schedule a coordinated input-delay change:
-		// the new delay is applied when frameId reaches pendingFrame, so every
-		// client switches at the same frame. pendingFrame == 0 means none pending.
-		pendingDelay uint
-		pendingFrame uint64
+		// nextFrame is the next frame to execute; it only ever moves forward.
+		// With a fixed InputDelay the due frame (frameId-InputDelay) never
+		// gets ahead of it, so it only stalls while the delay window re-arms
+		// after a Reset, and no frame is ever skipped or replayed.
+		nextFrame uint64
 
 		// Queue of messages for each frame, indexed by frame ID and player ID
 		queue map[uint64]map[string]Message
@@ -47,11 +46,12 @@ func NewFrameLoop(conf FrameConf) *FrameLoop {
 	defaultFrameConf(&conf)
 
 	return &FrameLoop{
-		conf:   conf,
-		adjust: make(chan struct{}, 1), // Add buffer to avoid blocking
-		queue:  make(map[uint64]map[string]Message),
-		synced: make(map[string]uint64),
-		done:   make(chan struct{}),
+		conf:      conf,
+		adjust:    make(chan struct{}, 1), // Add buffer to avoid blocking
+		nextFrame: 1,
+		queue:     make(map[uint64]map[string]Message),
+		synced:    make(map[string]uint64),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -71,46 +71,6 @@ func (f *FrameLoop) Frequency(frequency uint) error {
 	}
 
 	return nil
-}
-
-// AdjustInputDelay schedules a coordinated change of the uniform input delay
-// from a measured round-trip time. Frame sync runs every client on the same
-// frame, so the new delay takes effect DelayChangeLead frames from now (the
-// server applies it when frameId reaches that frame) and the processor is
-// notified so it can broadcast the switch to all clients.
-func (f *FrameLoop) AdjustInputDelay(rtt time.Duration) {
-	f.mu.Lock()
-
-	frameInterval := time.Second / time.Duration(f.conf.Frequency)
-
-	// ceil(RTT/2 / frameInterval) + 1 buffer frame for jitter.
-	delay := uint((rtt/2+frameInterval-1)/frameInterval) + 1
-
-	// Back to the currently applied value: cancel any pending switch.
-	if delay == f.conf.InputDelay {
-		f.pendingFrame = 0
-		f.pendingDelay = 0
-		f.mu.Unlock()
-		return
-	}
-
-	// A switch to this delay is already scheduled: keep the original frame so
-	// repeated samples do not keep pushing the effective frame out.
-	if f.pendingFrame != 0 && f.pendingDelay == delay {
-		f.mu.Unlock()
-		return
-	}
-
-	f.pendingDelay = delay
-	f.pendingFrame = f.frameId + uint64(f.conf.DelayChangeLead)
-
-	proc := f.proc
-	effective := f.pendingFrame
-	f.mu.Unlock()
-
-	if proc != nil {
-		proc.OnDelayChange(delay, effective)
-	}
 }
 
 // WithProc sets the frame processor for the frame loop.
@@ -179,8 +139,9 @@ func (f *FrameLoop) FrameId() uint64 {
 func (f *FrameLoop) Reset(id uint64) {
 	f.mu.Lock()
 	f.frameId = id
-	f.pendingFrame = 0
-	f.pendingDelay = 0
+	// Resume at id+1: the delay window then holds execution until fresh
+	// inputs have had time to arrive, so no pre-reset frames are re-run.
+	f.nextFrame = id + 1
 
 	for playerId := range f.synced {
 		f.synced[playerId] = id
@@ -196,22 +157,23 @@ func (f *FrameLoop) exec() {
 	f.mu.Lock()
 	f.frameId++
 
-	// Apply a coordinated delay change once its effective frame arrives.
-	if f.pendingFrame != 0 && f.frameId >= f.pendingFrame {
-		f.conf.InputDelay = f.pendingDelay
-		f.pendingFrame = 0
-		f.pendingDelay = 0
-	}
-
 	// Nothing to execute until the delay window has elapsed.
 	if f.frameId <= uint64(f.conf.InputDelay) {
 		f.mu.Unlock()
 		return
 	}
 
-	// Frame sync advances uniformly: every tick executes exactly one frame,
-	// InputDelay frames behind the current input frame.
-	targetFrame := f.frameId - uint64(f.conf.InputDelay)
+	// Frame N is due on tick N+InputDelay. nextFrame only sits above the due
+	// frame while the delay window re-arms after a Reset: hold the tick until
+	// it catches up, so no pre-reset frame is re-run with empty inputs.
+	// Otherwise the two advance in lockstep, one frame per tick.
+	if f.nextFrame > f.frameId-uint64(f.conf.InputDelay) {
+		f.mu.Unlock()
+		return
+	}
+
+	targetFrame := f.nextFrame
+	f.nextFrame++
 
 	inputs := f.queue[targetFrame]
 
@@ -259,15 +221,16 @@ func (f *FrameLoop) Stop() {
 	})
 }
 
-// stop processes any remaining frames and calls the OnClose method of the processor.
+// stop calls the OnClose method of the processor. Frames queued but not yet
+// due are discarded rather than executed: by the time the loop goroutine has
+// exited everything due has already run, so the queue only holds future
+// frames — executing them would fabricate empty inputs for players whose
+// messages are still in flight and broadcast a burst of frames no client
+// ever acted on.
 func (f *FrameLoop) stop() {
 	f.mu.RLock()
 	proc := f.proc
 	f.mu.RUnlock()
-
-	for len(f.queue) > 0 {
-		f.exec()
-	}
 
 	if proc == nil {
 		return
@@ -363,13 +326,9 @@ func (f *FrameLoop) Write(in Message) error {
 		}
 	}
 
-	// Reject messages for frames that have already been executed. Frame sync
-	// executes frameId-InputDelay each tick, so that is the past-frame boundary.
-	executed := uint64(0)
-	if f.frameId > uint64(f.conf.InputDelay) {
-		executed = f.frameId - uint64(f.conf.InputDelay)
-	}
-	if in.FrameID <= executed {
+	// Reject messages for frames that have already been executed; nextFrame
+	// is the next one still eligible, so anything below it is in the past.
+	if in.FrameID < f.nextFrame {
 		return errors.New("message for past frame")
 	}
 
@@ -398,10 +357,6 @@ func defaultFrameConf(conf *FrameConf) {
 
 	if conf.MaxFutureFrames == 0 {
 		conf.MaxFutureFrames = 60 // e.g. 2 seconds at 30Hz
-	}
-
-	if conf.DelayChangeLead == 0 {
-		conf.DelayChangeLead = 30 // e.g. 1 second at 30Hz
 	}
 }
 

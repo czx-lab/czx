@@ -15,8 +15,6 @@ type (
 		// Resend re-sends the input message to the player.
 		// It should be called when the input message is not received by the player.
 		Resend(playerId string, frameId int)
-		// It should be called when the input delay is changed to notify the processor.
-		OnDelayChange(newDelay uint, effectiveFrame uint64)
 	}
 	// NormalProcessor is an interface for processing normal messages.
 	// It is responsible for processing the input message.
