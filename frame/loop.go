@@ -48,6 +48,7 @@ type (
 		// DeletePlayer unregisters a player from the frame loop and removes their
 		// input queue. Use only for players permanently leaving the room.
 		DeletePlayer(string)
+		AdjustInputDelay(time.Duration) // dynamic input delay based on RTT
 	}
 
 	// NormalFace defines the interface for a normal loop, which processes normal messages.
